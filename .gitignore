@@ -1,3 +1,18 @@
+# OS
 .DS_Store
-.vercel
-.env*.local
+
+# Go build output
+cli/dist/
+cli/xparse-cli
+cli/xparse-cli.exe
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo

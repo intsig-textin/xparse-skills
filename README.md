@@ -1,42 +1,87 @@
-# Agent Skills
+# xparse-skills
 
-A collection of [Agent Skills](https://agentskills.io/) that extend AI coding agents with document parsing capabilities.
+Agent skills and CLI for document parsing powered by [Textin xParser](https://www.textin.com).
 
-## Installation
+Turn PDFs, images, and Office documents into clean Markdown or structured JSON — directly inside your AI coding agent.
+
+## Skills
+
+Install into your agent with one command:
 
 ```bash
 npx skills add intsig-textin/xparse-skills
 ```
 
-## Available Skills
+### xparse-parse
 
-### [xparse-parse](skills/xparse-parse/SKILL.md)
+Parse documents into Markdown or structured JSON via `xparse-cli`.
 
-Parse documents into clean markdown or structured JSON via the `xparse-cli`.
-
-**Supported formats:** PDF, images (JPG/PNG/BMP/TIFF), Word (.docx), PowerPoint (.pptx), Excel (.xlsx), HTML, OFD, RTF
+**Supported formats:** PDF · Images (JPG/PNG/BMP/TIFF/WebP) · Word · PowerPoint · Excel · HTML · OFD · RTF
 
 **Use when:**
-
-- User provides a local document to read, convert, or extract content from
+- User provides a local file or document URL to read, convert, or extract content from
 - Task requires turning a document into agent-friendly text before further processing
-- Preparing document content for summarization, analysis, or downstream workflows
-
-**Key features:**
-
-- Zero-config free API for PDF and images — no registration needed
-- Paid API for Office/HTML/OFD formats with unlimited quota
-- Page range selection and encrypted PDF support
-- Markdown and structured JSON output views
+- Preparing content for summarization, analysis, or downstream workflows
 
 **Quick start:**
 
 ```bash
-xparse-cli parse report.pdf                # Markdown output to stdout
+xparse-cli parse report.pdf                # Markdown → stdout
 xparse-cli parse report.pdf --view json    # Structured JSON output
+xparse-cli parse report.pdf --output ./result/   # Save to directory
 ```
 
-> For full setup, CLI options, and error handling, see [SKILL.md](skills/xparse-parse/SKILL.md).
+> See [SKILL.md](skills/xparse-parse/SKILL.md) for full routing rules, error handling, and references.
+
+## CLI
+
+`xparse-cli` is the underlying binary. It can also be used standalone.
+
+**Install:**
+
+```bash
+# Linux / macOS
+source <(curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.sh)
+
+# Windows (PowerShell)
+irm https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.ps1 | iex
+```
+
+**Key commands:**
+
+| Command | Description |
+|---------|-------------|
+| `xparse-cli parse <file>` | Parse a document to Markdown or JSON |
+| `xparse-cli auth` | Configure API credentials (interactive) |
+| `xparse-cli download --from result.json` | Download images from parse results |
+| `xparse-cli update` | Self-update to the latest version |
+| `xparse-cli version` | Show version info |
+
+**Free vs paid API:**
+
+| | Free | Paid |
+|-|------|------|
+| Supported formats | PDF, images | All formats |
+| Credentials | Not required | `xparse-cli auth` |
+| File size limit | 10 MB | 500 MB |
+
+> Full CLI documentation: [cli/README.md](cli/README.md)
+
+## Repository Structure
+
+```
+skills/
+  xparse-parse/          # Agent skill definition and references
+    SKILL.md
+    references/
+cli/                     # xparse-cli source (Go)
+  cmd/
+  internal/
+  install/               # Install scripts
+  build.sh               # Cross-compile script
+.github/workflows/
+  release.yml            # Auto-release on tag push
+```
 
 ## License
 
