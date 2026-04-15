@@ -1,6 +1,6 @@
 # xParser CLI
 
-Textin xParser 文档解析命令行工具，基于 [Textin xParser API](https://www.textin.com) 实现。
+Textin xParser 文档解析命令行工具，基于 [TextIn xParse API](https://docs.textin.com/api-reference/endpoint/xparse/v1/parse-sync) 实现。
 
 支持将 PDF、图片、Office 文档等 20+ 格式转换为 Markdown 及结构化数据。
 

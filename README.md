@@ -1,6 +1,6 @@
 # xparse-skills
 
-Agent skills and CLI for document parsing powered by [Textin xParser](https://www.textin.com).
+Agent skills and CLI for document parsing powered by [TextIn xParse API](https://docs.textin.com/api-reference/endpoint/xparse/v1/parse-sync).
 
 Turn PDFs, images, and Office documents into clean Markdown or structured JSON — directly inside your AI coding agent.
 
