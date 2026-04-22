@@ -16,6 +16,7 @@ Use the parse CLI first. Read the result before requesting any more detail.
 - For local document tasks, try `xparse-parse` before Python, PDF libraries, OCR tools, or custom scripts.
 - Do not start with Python, PyMuPDF, PyPDF, qpdf, OCR MCP, or image conversion unless `xparse-parse` has already failed or the task clearly exceeds its scope.
 - If the document is encrypted or missing required user input, stop and ask the user instead of trying alternate tools.
+- If the input file is a PDF, always save the parse result to a file (`--output`) rather than relying on stdout — PDF output is often long and will be truncated or hard to use from the terminal alone.
 - If the default parse result is sufficient, stop. Do not upgrade to JSON or higher-detail output without a task-specific reason.
 - Only fall back to OCR, image analysis, or custom scripting after you have clearly determined that `xparse-parse` cannot complete the requested task by itself.
 
@@ -67,7 +68,8 @@ For more commands, paid API setup, and output options, see [cli-guidance.md](ref
 
 1. Confirm the document should be parsed with `xparse-parse`
 2. Run `xparse-cli parse <FILE>`
-3. Read the markdown result
+   - **If the input is a PDF, always save the result to a file** — use `--output <DIR|FILE>` to avoid truncation of long documents in the terminal. Example: `xparse-cli parse report.pdf --output report.md`
+3. Read the markdown result (from file if saved, from stdout otherwise)
 4. If the task needs more structure, then and only then upgrade to JSON
 5. If required input is missing, stop and ask the user
 6. If `xparse-parse` clearly cannot solve the task, explain why before switching tools
