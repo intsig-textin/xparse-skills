@@ -149,9 +149,16 @@ type Summary struct {
 
 // ParseOptions holds V1 parse parameters.
 type ParseOptions struct {
-	PageRange          string // e.g. "1-5" or "1-2,5-10"
-	Password           string
-	IncludeCharDetails bool
+	PageRange             string // e.g. "1-5" or "1-2,5-10"
+	Password              string
+	IncludeHierarchy      bool
+	IncludeInlineObjects  bool
+	IncludeCharDetails    bool
+	IncludeImageData      bool
+	IncludeTableStructure bool
+	IncludePages          bool
+	IncludeTitleTree      bool
+	TableView             string // "html" | "markdown"
 }
 
 // buildConfig constructs the JSON config string for the multipart "config" field.
@@ -159,14 +166,14 @@ type ParseOptions struct {
 func (o *ParseOptions) buildConfig() string {
 	cfg := ParseRequestConfig{
 		Capabilities: &Capabilities{
-			IncludeHierarchy:      true,                 // CLI default: true  (API default: true)
-			IncludeInlineObjects:  true,                 // CLI default: true  (API default: false)
-			IncludeCharDetails:    o.IncludeCharDetails, // CLI default: false (API default: false)
-			IncludeImageData:      true,                 // CLI default: true  (API default: false)
-			IncludeTableStructure: true,                 // CLI default: true  (API default: false)
-			Pages:                 true,                 // CLI default: true  (API default: false)
-			TitleTree:             true,                 // CLI default: true  (API default: false)
-			TableView:             "html",               // CLI default: html  (API default: html)
+			IncludeHierarchy:      o.IncludeHierarchy,      // CLI default: true  (API default: true)
+			IncludeInlineObjects:  o.IncludeInlineObjects,  // CLI default: true  (API default: false)
+			IncludeCharDetails:    o.IncludeCharDetails,    // CLI default: false (API default: false)
+			IncludeImageData:      o.IncludeImageData,      // CLI default: true  (API default: false)
+			IncludeTableStructure: o.IncludeTableStructure, // CLI default: true  (API default: false)
+			Pages:                 o.IncludePages,          // CLI default: true  (API default: false)
+			TitleTree:             o.IncludeTitleTree,      // CLI default: true  (API default: false)
+			TableView:             o.TableView,             // CLI default: html  (API default: html)
 		},
 	}
 

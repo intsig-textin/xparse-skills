@@ -12,7 +12,8 @@ if [ $# -lt 1 ]; then
 fi
 
 VERSION="$1"
-GO_BIN="${GO_BIN:-/home/zhiqin_lu/go_1.25/bin/go}"
+GO_BIN="${GO_BIN:-/usr/bin/go}"
+
 PKG="github.com/intsig-textin/xparse-skills/cli/cmd"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLI_DIR="${SCRIPT_DIR}"

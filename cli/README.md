@@ -136,7 +136,14 @@ xparse-cli parse report.pdf --api paid
 | `--api` | _(auto)_ | API 模式：`free`、`paid` |
 | `--page-range` | | 页码范围：`"1-5"` 或 `"1-2,5-10"` |
 | `--password` | | 加密文档密码 |
+| `--include-hierarchy` | `true` | 元素层级关系与父子关联，默认开启。为 `false` 时关闭 |
+| `--include-inline-objects` | `true` | 内嵌对象：公式、手写、复选框、嵌入图片，默认开启。为 `false` 时关闭 |
+| `--include-image-data` | `true` | 图片 URL 及 Base64 数据，默认开启。为 `false` 时关闭 |
+| `--include-table-structure` | `true` | 表格单元格结构与坐标，默认开启。为 `false` 时关闭 |
+| `--include-pages` | `true` | 分页元数据与预览图 |
+| `--include-title-tree` | `true` | 文档标题层级目录树 |
 | `--include-char-details` | `false` | 返回字符级坐标和置信度 |
+| `--table-view` | `html` | 表格视图：`html`、`markdown` |
 | `--list` | | 从文件读取输入列表（需配合 `--output`） |
 | `--output` | _(stdout)_ | 输出文件路径或目录（目录须已存在） |
 
@@ -158,7 +165,8 @@ CLI 默认开启以下能力，Agent 无需额外配置：
 | 标题层级 | 开启 |
 | 内嵌对象（图片） | 开启 |
 | 图片数据 | 开启 |
-| 表格结构（HTML） | 开启 |
+| 表格视图 | `html` |
+| 表格结构 | 开启 |
 | 分页结果 | 开启 |
 | 目录树 | 开启 |
 | 字符级详情 | **关闭**（`--include-char-details` 开启） |

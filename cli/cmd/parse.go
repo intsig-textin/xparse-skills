@@ -17,13 +17,20 @@ import (
 // ── V1 parse flags ──
 
 var (
-	parseView              string // json | markdown
-	parseAPI               string // free | paid
-	parsePageRangeFlag     string // "1-5" or "1-2,5-10"
-	parsePassword          string
-	parseIncludeCharDetail string
-	parseListFile          string
-	parseOutput            string
+	parseView                     string // json | markdown
+	parseAPI                      string // free | paid
+	parsePageRangeFlag            string // "1-5" or "1-2,5-10"
+	parsePassword                 string
+	parseIncludeHierarchy         string
+	parseIncludeInlineObjects     string
+	parseIncludeCharDetail        string
+	parseIncludeImageData         string
+	parseIncludeTableStructure    string
+	parseIncludePages             string
+	parseIncludeTitleTree         string
+	parseTableView                string // html | markdown
+	parseListFile                 string
+	parseOutput                   string
 )
 
 var parseCmd = &cobra.Command{
@@ -65,8 +72,21 @@ func init() {
 	parseCmd.Flags().StringVar(&parseAPI, "api", "", "API mode: free, paid (default: paid if key exists, else free)")
 	parseCmd.Flags().StringVar(&parsePageRangeFlag, "page-range", "", `Page range, e.g. "1-5" or "1-2,5-10"`)
 	parseCmd.Flags().StringVar(&parsePassword, "password", "", "Password for encrypted documents")
+	parseCmd.Flags().StringVar(&parseIncludeHierarchy, "include-hierarchy", "", "Include element hierarchy and parent-child associations: true, false (default true)")
+	parseCmd.Flags().Lookup("include-hierarchy").NoOptDefVal = "true"
+	parseCmd.Flags().StringVar(&parseIncludeInlineObjects, "include-inline-objects", "", "Include inline objects (formulas, handwriting, checkboxes, embedded images): true, false (default true)")
+	parseCmd.Flags().Lookup("include-inline-objects").NoOptDefVal = "true"
 	parseCmd.Flags().StringVar(&parseIncludeCharDetail, "include-char-details", "", "Include character-level details: true, false (default false)")
 	parseCmd.Flags().Lookup("include-char-details").NoOptDefVal = "true"
+	parseCmd.Flags().StringVar(&parseIncludeImageData, "include-image-data", "", "Include image URLs and Base64 data: true, false (default true)")
+	parseCmd.Flags().Lookup("include-image-data").NoOptDefVal = "true"
+	parseCmd.Flags().StringVar(&parseIncludeTableStructure, "include-table-structure", "", "Include structured table cell data with coordinates: true, false (default true)")
+	parseCmd.Flags().Lookup("include-table-structure").NoOptDefVal = "true"
+	parseCmd.Flags().StringVar(&parseIncludePages, "include-pages", "", "Include per-page metadata and preview images: true, false (default true)")
+	parseCmd.Flags().Lookup("include-pages").NoOptDefVal = "true"
+	parseCmd.Flags().StringVar(&parseIncludeTitleTree, "include-title-tree", "", "Include hierarchical document outline: true, false (default true)")
+	parseCmd.Flags().Lookup("include-title-tree").NoOptDefVal = "true"
+	parseCmd.Flags().StringVar(&parseTableView, "table-view", "html", "Table output format: html, markdown (default html)")
 	parseCmd.Flags().StringVar(&parseListFile, "list", "", "Read input list from file (one path per line); requires --output")
 	parseCmd.Flags().StringVar(&parseOutput, "output", "", "Output file path or directory; omit for stdout")
 }
@@ -80,6 +100,14 @@ func runParse(cmd *cobra.Command, args []string) error {
 			"[fix] use --view markdown or --view json")
 	}
 
+	// Validate --table-view
+	switch parseTableView {
+	case "html", "markdown":
+	default:
+		return usageErr("invalid --table-view value, must be 'html' or 'markdown'",
+			"[fix] use --table-view html or --table-view markdown")
+	}
+
 	// Validate --api
 	var apiMode APIMode
 	switch parseAPI {
@@ -90,16 +118,34 @@ func runParse(cmd *cobra.Command, args []string) error {
 			"[fix] use --api free or --api paid")
 	}
 
-	// Validate --include-char-details
-	var includeCharDetails bool
-	switch strings.ToLower(parseIncludeCharDetail) {
-	case "", "false":
-		includeCharDetails = false
-	case "true":
-		includeCharDetails = true
-	default:
-		return usageErr(exitcode.ErrInvalidCharDetails,
-			"[fix] use --include-char-details, --include-char-details=true, or --include-char-details=false")
+	// Validate capability flags
+	includeHierarchy, err := parseBoolFlag(parseIncludeHierarchy, "include-hierarchy", true)
+	if err != nil {
+		return usageErr(err.Error(), "[fix] use --include-hierarchy, --include-hierarchy=true, or --include-hierarchy=false")
+	}
+	includeInlineObjects, err := parseBoolFlag(parseIncludeInlineObjects, "include-inline-objects", true)
+	if err != nil {
+		return usageErr(err.Error(), "[fix] use --include-inline-objects, --include-inline-objects=true, or --include-inline-objects=false")
+	}
+	includeCharDetails, err := parseBoolFlag(parseIncludeCharDetail, "include-char-details", false)
+	if err != nil {
+		return usageErr(err.Error(), "[fix] use --include-char-details, --include-char-details=true, or --include-char-details=false")
+	}
+	includeImageData, err := parseBoolFlag(parseIncludeImageData, "include-image-data", true)
+	if err != nil {
+		return usageErr(err.Error(), "[fix] use --include-image-data, --include-image-data=true, or --include-image-data=false")
+	}
+	includeTableStructure, err := parseBoolFlag(parseIncludeTableStructure, "include-table-structure", true)
+	if err != nil {
+		return usageErr(err.Error(), "[fix] use --include-table-structure, --include-table-structure=true, or --include-table-structure=false")
+	}
+	includePages, err := parseBoolFlag(parseIncludePages, "include-pages", true)
+	if err != nil {
+		return usageErr(err.Error(), "[fix] use --include-pages, --include-pages=true, or --include-pages=false")
+	}
+	includeTitleTree, err := parseBoolFlag(parseIncludeTitleTree, "include-title-tree", true)
+	if err != nil {
+		return usageErr(err.Error(), "[fix] use --include-title-tree, --include-title-tree=true, or --include-title-tree=false")
 	}
 
 	// Collect input sources
@@ -162,9 +208,16 @@ func runParse(cmd *cobra.Command, args []string) error {
 	client := newXParserClient(cmd, credSrc, isFree)
 
 	opts := &ParseOptions{
-		PageRange:          parsePageRangeFlag,
-		Password:           parsePassword,
-		IncludeCharDetails: includeCharDetails,
+		PageRange:             parsePageRangeFlag,
+		Password:              parsePassword,
+		IncludeHierarchy:      includeHierarchy,
+		IncludeInlineObjects:  includeInlineObjects,
+		IncludeCharDetails:    includeCharDetails,
+		IncludeImageData:      includeImageData,
+		IncludeTableStructure: includeTableStructure,
+		IncludePages:          includePages,
+		IncludeTitleTree:      includeTitleTree,
+		TableView:             parseTableView,
 	}
 
 	if len(sources) == 1 {
@@ -230,6 +283,30 @@ func runBatchParse(client *XParserClient, sources []string, opts *ParseOptions) 
 	}
 	if opts.Password != "" {
 		retryBase += " --password " + opts.Password
+	}
+	if !opts.IncludeHierarchy {
+		retryBase += " --include-hierarchy=false"
+	}
+	if !opts.IncludeInlineObjects {
+		retryBase += " --include-inline-objects=false"
+	}
+	if opts.IncludeCharDetails {
+		retryBase += " --include-char-details"
+	}
+	if !opts.IncludeImageData {
+		retryBase += " --include-image-data=false"
+	}
+	if !opts.IncludeTableStructure {
+		retryBase += " --include-table-structure=false"
+	}
+	if !opts.IncludePages {
+		retryBase += " --include-pages=false"
+	}
+	if !opts.IncludeTitleTree {
+		retryBase += " --include-title-tree=false"
+	}
+	if opts.TableView != "html" {
+		retryBase += " --table-view " + opts.TableView
 	}
 
 	for _, source := range sources {
@@ -433,6 +510,21 @@ func (e *exitError) Error() string { return e.msg }
 
 // ExitCode returns the process exit code for this error.
 func (e *exitError) ExitCode() int { return e.code }
+
+// parseBoolFlag parses a bool-string flag value ("", "true", "false") into a bool.
+// An empty string returns the provided defaultValue.
+func parseBoolFlag(value, flagName string, defaultValue bool) (bool, error) {
+	switch strings.ToLower(value) {
+	case "":
+		return defaultValue, nil
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, fmt.Errorf("invalid --%s value, must be 'true' or 'false'", flagName)
+	}
+}
 
 // ── shared helpers ──
 
