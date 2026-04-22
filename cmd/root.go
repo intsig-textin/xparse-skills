@@ -55,7 +55,13 @@ For more information, visit https://www.textin.com`,
 // to "--flag=true/false" before cobra parses args, because pflag's NoOptDefVal
 // prevents consuming the next token as the flag value.
 var boolStringFlags = map[string]bool{
-	"--include-char-details": true,
+	"--include-hierarchy":      true,
+	"--include-inline-objects": true,
+	"--include-char-details":   true,
+	"--include-image-data":     true,
+	"--include-table-structure": true,
+	"--include-pages":          true,
+	"--include-title-tree":     true,
 }
 
 func normalizeArgs() {
