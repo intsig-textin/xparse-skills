@@ -1,6 +1,6 @@
 ---
 name: xparse-doc-tools
-description: Navigate and extract content from parsed documents using tool primitives. Use this skill when the user wants to read specific sections, search text, get outlines, or extract tables from a PDF/document that has been (or needs to be) parsed by xparse. This skill orchestrates a 4-step workflow (get_doc_info → ensure_parsed → get_outline → read_content) to efficiently access document content with minimal API calls. Prefer this over reading raw files or writing custom extraction scripts.
+description: Navigate and extract content from parsed documents (PDF/images). Use when user wants to read sections, search text, get outlines, or extract tables — NOT for full document dumps (use xparse-parse instead). Prefer this over raw file reading or custom extraction scripts.
 compatibility: Requires the `xparse-cli` binary with tool primitive commands (get_doc_info, ensure_parsed, get_outline, read_content, read_pages, search_text, get_confidence). Free API supports PDF and images; paid API unlocks additional formats.
 
 ---
@@ -13,10 +13,9 @@ Use the xparse-cli document tool primitives to navigate and extract content from
 
 ## Routing Rules
 
-- Use `xparse-doc-tools` when the user wants to read, search, or extract structured content from a document (sections, tables, pages, outlines).
-- Use `xparse-parse` instead if the user just needs a full markdown dump of the entire document.
+- Use `xparse-parse` instead if the user needs a full markdown dump of the entire document.
 - Do not write custom PDF extraction scripts (PyMuPDF, pdfplumber, etc.) when these primitives can do the job.
-- If `ensure_parsed` has already been called for a document, all subsequent reads are zero API calls from cache.
+- **Always call `ensure_parsed` in Step 2** — it is idempotent. If the document is already cached it returns immediately (zero API calls); no need to check cache manually first.
 
 ## Setup
 
@@ -44,7 +43,7 @@ Always follow this sequence for any document task:
 
 ```
 Step 1: get_doc_info    → Get doc_id, page_count (local, zero API)
-Step 2: ensure_parsed   → Full parse + cache (API call, once per document)
+Step 2: ensure_parsed   → Full parse + cache (idempotent; API call only on first parse)
 Step 3: get_outline     → Get table of contents (from cache, zero API)
 Step 4: read_content    → Read specific sections/elements (from cache, zero API)
 ```
@@ -85,9 +84,11 @@ Returns: `doc_id`, `filepath`, `filename`, `page_count`, `doc_type`
 xparse-cli ensure_parsed <doc_id> <page_count>
 ```
 
+> Both `doc_id` and `page_count` must be taken verbatim from `get_doc_info` output.
+
 Returns: `success`, `cached`, `segments`, `total_elements`, `total_titles`
 
-- If already cached, returns immediately (zero API calls)
+- **Idempotent**: if already cached, returns immediately (zero API calls) — always safe to call
 - Documents <= 50 pages: single API call
 - Documents > 50 pages: automatic segmentation (50 pages/segment, serial calls, merged result)
 - After this call, all subsequent tools read from cache with zero API cost
@@ -151,29 +152,39 @@ After search, use results via:
 2. `read_content <doc_id> <element_id>` for full element
 3. `read_content <doc_id> <heading_ref_id>` for containing section
 
-### 7. `get_confidence` — OCR Confidence (Separate API Call)
+### 7. `get_confidence` — OCR Confidence (Optional — Separate API Call)
 
 ```bash
 xparse-cli get_confidence <doc_id> --element-id <id> [--text "fragment"]
 xparse-cli get_confidence <doc_id> --page <N> [--text "fragment"]
 ```
 
+- Only use when OCR quality is suspect (scanned documents, blurry images) — not part of the standard workflow
 - Requires a separate API call with character-level details (not in standard cache)
-- Use only when OCR quality is suspect (scanned documents, blurry images)
 - Returns: `confidence` (0-1), `low_confidence_spans[]`, optional `text_confidence`
 
 ## Navigation Strategy
 
-```
-has_toc=true:
-  get_outline → read_content(heading_short_id)   # Standard path
+Choose a path based on what the user wants to find:
 
-has_toc=false:
-  get_outline → read_pages → read_content        # Fallback to page reading
-
-Any path:
-  search_text is always available for keyword lookup
 ```
+User knows section name / heading:
+  → get_outline → read_content(element_id)
+
+User knows a keyword but not location:
+  → search_text → inspect context field
+    → if context sufficient: done
+    → if need full element: read_content(element_id)
+    → if need surrounding section: read_content(heading_ref_id)
+
+User knows page number:
+  → read_pages(start, end)  [max 20 pages per call]
+
+Document has no clear headings (has_toc=false):
+  → search_text first, fallback to read_pages if no hits
+```
+
+`search_text` is always available regardless of path.
 
 ## Cache Management
 

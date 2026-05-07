@@ -16,8 +16,8 @@ Use the parse CLI first. Read the result before requesting any more detail.
 - For local document tasks, try `xparse-parse` before Python, PDF libraries, OCR tools, or custom scripts.
 - Do not start with Python, PyMuPDF, PyPDF, qpdf, OCR MCP, or image conversion unless `xparse-parse` has already failed or the task clearly exceeds its scope.
 - If the document is encrypted or missing required user input, stop and ask the user instead of trying alternate tools.
-- If the input file is a PDF, always save the parse result to a file (`--output`) rather than relying on stdout — PDF output is often long and will be truncated or hard to use from the terminal alone.
-- If the default parse result is sufficient, stop. Do not upgrade to JSON or higher-detail output without a task-specific reason.
+- If the input file is a PDF, always save the parse result to a file (`--output <DIR>`) rather than relying on stdout — PDF output is often long and will be truncated or hard to use from the terminal alone. Pass a directory path; the CLI writes `<basename>.md` into it automatically.
+- If the default parse result is sufficient, stop. Do not upgrade to `--include-char-details` without a task-specific reason.
 - Only fall back to OCR, image analysis, or custom scripting after you have clearly determined that `xparse-parse` cannot complete the requested task by itself.
 
 ## Setup
@@ -52,13 +52,13 @@ xparse-cli parse report.pdf                         # Markdown → stdout
 |------|---------|
 | Markdown to stdout | `xparse-cli parse <FILE>` |
 | JSON to stdout | `xparse-cli parse <FILE> --view json` |
-| Save markdown | `xparse-cli parse <FILE> --view markdown --output <DIR\|FILE>` |
-| Save JSON | `xparse-cli parse <FILE> --view json --output <DIR\|FILE>` |
+| Save markdown | `xparse-cli parse <FILE> --view markdown --output <DIR>` |
+| Save JSON | `xparse-cli parse <FILE> --view json --output <DIR>` |
 | Page range | `xparse-cli parse <FILE> --page-range 1-5` |
 | Encrypted doc | `xparse-cli parse <FILE> --password <PWD>` |
-| Character details (bbox, confidence, candidate per char) | `xparse-cli parse <FILE> --view json --output <DIR\|FILE> --include-char-details` |
+| Character details (bbox, confidence, candidate per char) | `xparse-cli parse <FILE> --view json --output <DIR> --include-char-details` |
 
-> `--output <DIR>` auto-generates `<basename>.md` or `<basename>.json`; `--output <FILE>` writes directly.
+> `--output` only accepts a **directory path**. The CLI auto-generates the output filename as `<basename>.md` or `<basename>.json` inside that directory. The directory must already exist.
 
 Run parse requests serially by default. Do not start another until the previous result has been inspected. Only run in parallel when the user explicitly asks for batching or parallel processing and paid API credentials are configured.
 
@@ -67,10 +67,10 @@ For more commands, paid API setup, and output options, see [cli-guidance.md](ref
 ## Default Path
 
 1. Confirm the document should be parsed with `xparse-parse`
-2. Run `xparse-cli parse <FILE>`
-   - **If the input is a PDF, always save the result to a file** — use `--output <DIR|FILE>` to avoid truncation of long documents in the terminal. Example: `xparse-cli parse report.pdf --output report.md`
-3. Read the markdown result (from file if saved, from stdout otherwise)
-4. If the task needs more structure, then and only then upgrade to JSON
+2. Run `xparse-cli parse <FILE> --output <DIR>`
+   - **Always use `--output <DIR>`** (a directory path, not a filename) for PDFs — output is often long and will be truncated in the terminal. Example: `xparse-cli parse report.pdf --output ./` saves `report.md` in the current directory.
+3. Read the result file
+4. Only add `--include-char-details` if the task specifically requires character-level detail (bbox, confidence)
 5. If required input is missing, stop and ask the user
 6. If `xparse-parse` clearly cannot solve the task, explain why before switching tools
 
