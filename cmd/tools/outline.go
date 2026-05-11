@@ -10,16 +10,32 @@ import (
 	"github.com/intsig-textin/xparse-skills/cli/internal/models"
 )
 
+var (
+	outlineDepth    int
+	outlineParentID string
+)
+
 var getOutlineCmd = &cobra.Command{
 	Use:   "get_outline <doc_id>",
 	Short: "Get document outline/table of contents (from cache, zero API calls)",
 	Long: `Return the hierarchical document outline from cached parse results.
 Requires ensure_parsed to have been called first.
 
+By default only returns the top 2 levels of headings to keep output compact.
+Use --depth 0 to get all levels, or --parent-id to drill into a section.
+
 Examples:
-  xparse-cli get_outline abc123def456`,
+  xparse-cli get_outline abc123def456
+  xparse-cli get_outline abc123def456 --depth 3
+  xparse-cli get_outline abc123def456 --depth 0
+  xparse-cli get_outline abc123def456 --parent-id e7f3a1`,
 	Args: cobra.ExactArgs(1),
 	RunE: runGetOutline,
+}
+
+func init() {
+	getOutlineCmd.Flags().IntVar(&outlineDepth, "depth", 2, "Max heading depth to return (0 = all levels)")
+	getOutlineCmd.Flags().StringVar(&outlineParentID, "parent-id", "", "Only return children of this element_id")
 }
 
 // outlineOutput is the JSON output of get_outline.
@@ -28,7 +44,9 @@ type outlineOutput struct {
 	PageCount   int                   `json:"page_count"`
 	HasTOC      bool                  `json:"has_toc"`
 	OutlineText string                `json:"outline_text"`
-	Entries     []models.OutlineEntry `json:"entries"`
+	Entries     []models.OutlineEntry `json:"entries,omitempty"`
+	Truncated   bool                  `json:"truncated,omitempty"`
+	TotalTitles int                   `json:"total_titles,omitempty"`
 }
 
 func runGetOutline(cmd *cobra.Command, args []string) error {
@@ -49,38 +67,80 @@ func runGetOutline(cmd *cobra.Command, args []string) error {
 		pageCount = result.Metadata.PageCount
 	}
 
-	// Build entries from title_tree
-	entries := flattenTitleTree(result.TitleTree, result.Elements)
-
-	// Assign unique short_ids
-	assignShortIDs(entries)
-
 	// Determine has_toc: count total nodes in title_tree > 2
 	totalNodes := countTitleNodes(result.TitleTree)
 	hasTOC := totalNodes > 2
 
+	// Resolve the tree to flatten: either full tree or subtree under parent-id
+	treeToFlatten := result.TitleTree
+	if outlineParentID != "" {
+		subtree := findChildrenByParentID(result.TitleTree, outlineParentID)
+		if subtree == nil {
+			return generalErr("parent-id not found: "+outlineParentID,
+				"[fix] check available IDs from get_outline without --parent-id")
+		}
+		treeToFlatten = subtree
+	}
+
+	// Build entries with depth limit (0 = unlimited)
+	var entries []models.OutlineEntry
+	flattenNodes(treeToFlatten, result.Elements, "", nil, &entries, 1, outlineDepth)
+
+	// Assign unique short_ids, then replace element_id with the truncated form
+	// so that agents use short IDs directly from the element_id field.
+	assignShortIDs(entries)
+	for i := range entries {
+		entries[i].ElementID = entries[i].ShortID
+	}
+
 	// Generate outline text
 	outlineText := generateOutlineText(entries)
+
+	truncated := outlineDepth > 0 && totalNodes > len(entries)
+
+	// When truncated, omit entries: they are incomplete and would mislead the agent
+	// into thinking all sections are covered. The agent must use --parent-id to drill
+	// down and obtain a complete entries list for the target sub-tree.
+	var outEntries []models.OutlineEntry
+	if !truncated {
+		outEntries = entries
+	}
 
 	out := &outlineOutput{
 		DocID:       docID,
 		PageCount:   pageCount,
 		HasTOC:      hasTOC,
 		OutlineText: outlineText,
-		Entries:     entries,
+		Entries:     outEntries,
+		Truncated:   truncated,
+		TotalTitles: totalNodes,
 	}
 
 	return outputJSON(out)
 }
 
+// findChildrenByParentID searches the tree for a node with the given element_id
+// and returns its children. Returns nil if not found.
+func findChildrenByParentID(nodes []models.TitleNode, targetID string) []models.TitleNode {
+	for _, node := range nodes {
+		if node.ElementID == targetID || strings.HasPrefix(node.ElementID, targetID) {
+			return node.Children
+		}
+		if found := findChildrenByParentID(node.Children, targetID); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
 // flattenTitleTree converts the nested TitleNode tree into flat OutlineEntry list.
 func flattenTitleTree(titleTree []models.TitleNode, elements []models.Element) []models.OutlineEntry {
 	var entries []models.OutlineEntry
-	flattenNodes(titleTree, elements, "", nil, &entries)
+	flattenNodes(titleTree, elements, "", nil, &entries, 1, 0)
 	return entries
 }
 
-func flattenNodes(nodes []models.TitleNode, elements []models.Element, parentID string, path []string, entries *[]models.OutlineEntry) {
+func flattenNodes(nodes []models.TitleNode, elements []models.Element, parentID string, path []string, entries *[]models.OutlineEntry, currentLevel int, maxDepth int) {
 	for _, node := range nodes {
 		currentPath := make([]string, len(path)+1)
 		copy(currentPath, path)
@@ -99,8 +159,10 @@ func flattenNodes(nodes []models.TitleNode, elements []models.Element, parentID 
 		}
 		*entries = append(*entries, entry)
 
-		// Recurse children
-		flattenNodes(node.Children, elements, node.ElementID, currentPath, entries)
+		// Recurse children only if within depth limit (maxDepth 0 = unlimited)
+		if maxDepth == 0 || currentLevel < maxDepth {
+			flattenNodes(node.Children, elements, node.ElementID, currentPath, entries, currentLevel+1, maxDepth)
+		}
 	}
 }
 
