@@ -21,8 +21,8 @@ const (
 	PaidAPIBaseURL   = "https://api.textin.com"
 	PaidParseAPIPath = "/api/v1/xparse/parse/sync"
 
-	FreeAPIBaseURL   = "https://api.textin.com"
-	FreeParseAPIPath = "/api/v1/agent/parse/sync"
+	FreeAPIBaseURL   = "https://img2word-copy.ai.intsig.net"
+	FreeParseAPIPath = "/ai/service/v3/pdf_to_markdown"
 )
 
 // APIMode represents free vs paid API selection.
@@ -119,6 +119,30 @@ type ParseResponse struct {
 	Message    string     `json:"message"`
 	XRequestID string     `json:"x_request_id,omitempty"`
 	Data       *ParseData `json:"data,omitempty"`
+}
+
+// UnmarshalJSON 兼容 "data" 和 "result" 两种字段名。
+func (r *ParseResponse) UnmarshalJSON(b []byte) error {
+	type alias struct {
+		Code       int        `json:"code"`
+		Message    string     `json:"message"`
+		XRequestID string     `json:"x_request_id,omitempty"`
+		Data       *ParseData `json:"data,omitempty"`
+		Result     *ParseData `json:"result,omitempty"`
+	}
+	var a alias
+	if err := json.Unmarshal(b, &a); err != nil {
+		return err
+	}
+	r.Code = a.Code
+	r.Message = a.Message
+	r.XRequestID = a.XRequestID
+	if a.Data != nil {
+		r.Data = a.Data
+	} else {
+		r.Data = a.Result
+	}
+	return nil
 }
 
 // HasResult returns true if Data is present.

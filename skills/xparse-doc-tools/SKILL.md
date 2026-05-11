@@ -7,235 +7,115 @@ compatibility: Requires the `xparse-cli` binary with tool primitive commands (ge
 
 # xparse-doc-tools
 
-## Overview
-
-Use the xparse-cli document tool primitives to navigate and extract content from documents. The workflow minimizes API calls by caching parsed results locally.
-
 ## Routing Rules
 
 - Use `xparse-parse` instead if the user needs a full markdown dump of the entire document.
 - Do not write custom PDF extraction scripts (PyMuPDF, pdfplumber, etc.) when these primitives can do the job.
-- **Always call `ensure_parsed` in Step 2** — it is idempotent. If the document is already cached it returns immediately (zero API calls); no need to check cache manually first.
 
-## Setup
+## Standard Workflow
 
-Check if installed: `xparse-cli version`
-
-If `command not found` after install, try the absolute path: `~/.local/bin/xparse-cli version`
-
-Update to latest version: `xparse-cli update`
-
-If not found, install:
-
-| Platform | Command |
-|----------|---------|
-| Linux / macOS | ` source <(curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.sh) ` |
-| Windows (PowerShell) | `irm https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.ps1 \| iex` |
-
-Verify tool primitives are available:
-```bash
-xparse-cli get_doc_info --help
-```
-
-## Standard Workflow (4 Steps)
-
-Always follow this sequence for any document task:
+Always follow this sequence. Steps 1–2 are mandatory; Step 3–4 depend on navigation strategy.
 
 ```
-Step 1: get_doc_info    → Get doc_id, page_count (local, zero API)
-Step 2: ensure_parsed   → Full parse + cache (idempotent; API call only on first parse)
-Step 3: get_outline     → Get table of contents (from cache, zero API)
-Step 4: read_content    → Read specific sections/elements (from cache, zero API)
+Step 1: get_doc_info   → doc_id, page_count (local, instant)
+Step 2: ensure_parsed  → parse + cache (idempotent; zero API if already cached)
+Step 3: Navigate       → get_outline / search_text / read_pages (see Navigation Table)
+Step 4: Extract        → read_content with exact element_id(s)
 ```
 
-## Quick Reference
+**Parallelism rule** (applies to Step 3–4): `read_content`, `read_pages`, and `search_text` are read-only cache operations. Collect ALL needed element_ids first, then issue ALL calls in a **single parallel batch** — never loop one at a time.
 
-| Goal | Command |
-|------|---------|
-| Get doc metadata | `xparse-cli get_doc_info <filepath>` |
-| Parse and cache document | `xparse-cli ensure_parsed <doc_id> <page_count>` |
-| Get document outline | `xparse-cli get_outline <doc_id>` |
-| Read section/element content | `xparse-cli read_content <doc_id> <element_id>` |
-| Read by page range | `xparse-cli read_pages <doc_id> <start_page> <end_page>` |
-| Search text in document | `xparse-cli search_text <doc_id> <pattern>` |
-| Search with regex | `xparse-cli search_text <doc_id> <pattern> --regex` |
-| Check OCR confidence | `xparse-cli get_confidence <doc_id> --element-id <id>` |
-| List cached documents | `xparse-cli cache ls` |
-| Clean all cache | `xparse-cli cache clean` |
+## Navigation Decision Table
 
-## Tool Primitives
+| User intent | Action sequence |
+|-------------|----------------|
+| Knows section name, `truncated=false` | `get_outline` → `read_content(element_id)` |
+| Knows section name, `truncated=true` | `get_outline` → `get_outline --parent-id <id>` (repeat until target visible) → `read_content(element_id)` |
+| Knows keyword, not location | `search_text` → use `context` directly, or `read_content(element_id)` / `read_content(heading_ref_id)` for more |
+| Knows keyword + target section | `get_outline` → `search_text --scope <section_id>` → `read_content(element_id)` |
+| Knows page number | `read_pages(start, end)` (max 20 pages/call) |
+| No headings (`has_toc=false`) | `search_text` → fallback `read_pages` |
 
-### 1. `get_doc_info` — Document Metadata (Local, Zero API)
+**Rule**: never call `read_content` with a guessed or top-level element_id when `truncated=true`. Always drill down via `--parent-id` first.
 
-```bash
-xparse-cli get_doc_info <filepath>
-```
+## Command Reference
 
-Returns: `doc_id`, `filepath`, `filename`, `page_count`, `doc_type`
+| Command | Returns | Notes |
+|---------|---------|-------|
+| `xparse-cli get_doc_info <filepath>` | `doc_id`, `page_count`, `doc_type` | Local, instant. Always call first. |
+| `xparse-cli ensure_parsed <doc_id> <page_count>` | `success`, `cached`, `total_elements`, `total_titles` | Idempotent. >50 pages auto-segments (50pp/segment). Only command that writes cache. |
+| `xparse-cli get_outline <doc_id> [--depth N] [--parent-id <id>]` | `has_toc`, `outline_text`, `entries[]`, `truncated`, `total_titles` | Default depth=2. `--depth 0` for all. `outline_text` always has `{element_id}` inline. |
+| `xparse-cli read_content <doc_id> <element_id>` | section→`content_markdown`,`children[]`; table→`markdown`,`html`; paragraph→`content_markdown` | Auto-detects type. ~1-5K tokens for typical section, ~500 tokens for table/paragraph. |
+| `xparse-cli read_pages <doc_id> <start> <end>` | per-page `content_markdown`, `tables[]`, `images[]` | Max 20 pages/call. ~500-1K tokens/page. Use when no heading structure. |
+| `xparse-cli search_text <doc_id> <pattern> [--regex] [--max-results N] [--scope <element_id>]` | `matches[]` with `element_id`, `context`, `heading_ref_id`, `page` | Case-insensitive substring by default. Max 20 results default. `--scope` limits to section and descendants. |
+| `xparse-cli get_confidence <doc_id> --element-id <id>` | `confidence` (0-1), `low_confidence_spans[]` | Optional. Separate API call. Only for suspect OCR quality. |
 
-- Pure local operation using PDF library, millisecond response
-- `doc_id` = `sha256(abs_filepath)[:12]`, used as cache key for all subsequent calls
-- `doc_type`: contract / report / manual / invoice / presentation / other
-- Always call this first to obtain `doc_id` and `page_count`
+### Output size guidance
 
-### 2. `ensure_parsed` — Full Parse + Cache (API Call)
+- Prefer `search_text` over `read_content` for large sections (>30 pages) — get precise hits first, then extract only what's needed.
+- For large documents with high-frequency keywords, use `search_text --scope <section_id>` to avoid irrelevant matches filling up `max-results`.
+- `read_pages` of 20 pages ≈ 10-20K tokens. Split into smaller ranges if context budget is tight.
+- When `total_titles` > 50, always use `--parent-id` drill-down rather than `--depth 0`.
 
-```bash
-xparse-cli ensure_parsed <doc_id> <page_count>
-```
+### Key details
 
-> Both `doc_id` and `page_count` must be taken verbatim from `get_doc_info` output.
+- `doc_id` = `sha256(abs_filepath)[:12]`, stable cache key
+- `element_id`: 6-8 char truncated ID from `get_outline` or `search_text`, used in `read_content` and `--parent-id`
+- `ensure_parsed` args (`doc_id`, `page_count`) must come verbatim from `get_doc_info` output
+- `get_outline` with `truncated=true`: `entries[]` is omitted, use `outline_text` to read IDs
 
-Returns: `success`, `cached`, `segments`, `total_elements`, `total_titles`
+## Error Recovery
 
-- **Idempotent**: if already cached, returns immediately (zero API calls) — always safe to call
-- Documents <= 50 pages: single API call
-- Documents > 50 pages: automatic segmentation (50 pages/segment, serial calls, merged result)
-- After this call, all subsequent tools read from cache with zero API cost
-- This is the **only** command that writes to the parse cache
-
-### 3. `get_outline` — Document Outline (From Cache)
-
-```bash
-xparse-cli get_outline <doc_id>
-```
-
-Returns: `doc_id`, `page_count`, `has_toc`, `outline_text`, `entries[]`
-
-- Each entry has: `element_id` (6-8 char truncated ID), `heading`, `heading_path`, `level`, `page_start`, `page_end`, `parent_id`
-- `outline_text` is a readable Markdown-formatted TOC with page ranges and element_ids
-- `has_toc` = true if title_tree has > 2 nodes
-- Use `element_id` from entries directly for `read_content`
-
-### 4. `read_content` — Read by Element ID (From Cache)
-
-```bash
-xparse-cli read_content <doc_id> <element_id>
-```
-
-`element_id` is a 6-8 char truncated ID, obtained from `get_outline` or `search_text` results.
-
-Auto-detects element type and adapts output format:
-
-| Type | Input source | Output |
-|------|-------------|--------|
-| **section** | heading `element_id` from `get_outline` | `content_markdown`, `content_length`, `children[]` |
-| **table** | table element from `search_text` | `caption`, `headers`, `rows`, `markdown`, `html` |
-| **paragraph** | paragraph element from `search_text` | `content_markdown` |
-
-### 5. `read_pages` — Read by Page Range (From Cache)
-
-```bash
-xparse-cli read_pages <doc_id> <start_page> <end_page>
-```
-
-- Maximum 20 pages per call
-- Returns per-page: `content_markdown`, `tables[]`, `images[]`
-- Use when document has no clear heading structure, or you need raw page-by-page content
-- Skips headers/footers automatically
-
-### 6. `search_text` — Full-text Search (From Cache)
-
-```bash
-xparse-cli search_text <doc_id> <pattern> [--regex] [--max-results N]
-```
-
-Returns: `total_matches`, `matches[]` with `match_text`, `element_id` (6-8 chars), `element_type`, `page`, `context`, `heading_ref_id` (6-8 chars), `heading`
-
-- Default: case-insensitive substring match
-- `--regex`: regex mode
-- `--max-results`: default 20
-- All returned IDs (`element_id`, `heading_ref_id`) are truncated 6-8 char IDs, directly usable with `read_content`
-
-After search, use results via:
-1. `context` field directly (if answer is visible)
-2. `read_content <doc_id> <element_id>` for full element
-3. `read_content <doc_id> <heading_ref_id>` for containing section
-
-### 7. `get_confidence` — OCR Confidence (Optional — Separate API Call)
-
-```bash
-xparse-cli get_confidence <doc_id> --element-id <id> [--text "fragment"]
-xparse-cli get_confidence <doc_id> --page <N> [--text "fragment"]
-```
-
-- Only use when OCR quality is suspect (scanned documents, blurry images) — not part of the standard workflow
-- Requires a separate API call with character-level details (not in standard cache)
-- Returns: `confidence` (0-1), `low_confidence_spans[]`, optional `text_confidence`
-
-## Navigation Strategy
-
-Choose a path based on what the user wants to find:
-
-```
-User knows section name / heading:
-  → get_outline → read_content(element_id)
-
-User knows a keyword but not location:
-  → search_text → inspect context field
-    → if context sufficient: done
-    → if need full element: read_content(element_id)
-    → if need surrounding section: read_content(heading_ref_id)
-
-User knows page number:
-  → read_pages(start, end)  [max 20 pages per call]
-
-Document has no clear headings (has_toc=false):
-  → search_text first, fallback to read_pages if no hits
-```
-
-`search_text` is always available regardless of path.
-
-## Cache Management
-
-```bash
-xparse-cli cache ls          # List all cached documents (doc_id, filepath, parsed status)
-xparse-cli cache clean       # Remove all cached data (~/.xparse-cli/)
-```
-
-Cache is stored at `~/.xparse-cli/`:
-- `~/.xparse-cli/docinfo/{doc_id}.json` — document metadata
-- `~/.xparse-cli/cache/{doc_id}.json` — full parse results
-
-Cache has no TTL. Documents are cached permanently until manually cleaned.
-
-## Error Handling
-
-| Error | Action |
-|-------|--------|
+| Error | Fix |
+|-------|-----|
 | "cache miss for doc_id" | Call `ensure_parsed` first |
 | "doc_id not found in session" | Call `get_doc_info` first |
-| "element_id not found" | Check available IDs from `get_outline` or `search_text` |
-| "page range too large" | Use max 20 pages per `read_pages` call |
-| API rate limit (40306) | Wait and retry automatically (built-in) |
-| Free quota exhausted (40307) | Stop, inform user |
+| "element_id not found" | Re-check IDs from `get_outline` or `search_text` |
+| "page range too large" | Reduce to ≤20 pages |
+| Rate limit (40306) | Auto-retry built in |
+| Quota exhausted (40307) | Stop, inform user |
+| Password-protected document | Ask user for password |
 
-## When to Stop
-
-- If `ensure_parsed` fails due to quota/network after retries, inform the user
-- If the document requires a password, ask the user
-- Do not retry indefinitely — one automatic retry is built in, escalate after that
+Do not retry indefinitely — one automatic retry is built in, escalate after that.
 
 ## Example Session
 
 ```bash
-# Step 1: Get document info
+# Step 1–2: Init
 xparse-cli get_doc_info /path/to/annual-report.pdf
-# → {"doc_id":"a1b2c3d4e5f6","page_count":120,"doc_type":"report",...}
+# → {"doc_id":"a1b2c3d4e5f6","page_count":120,"doc_type":"report"}
 
-# Step 2: Parse and cache (automatic segmentation for 120 pages)
 xparse-cli ensure_parsed a1b2c3d4e5f6 120
 # → {"success":true,"cached":false,"segments":3,"total_elements":892,"total_titles":45}
 
-# Step 3: Get outline
+# Step 3: Navigate (truncated=true → drill down)
 xparse-cli get_outline a1b2c3d4e5f6
-# → {"has_toc":true,"outline_text":"# 第一章 公司概况 [1-15] {e7f3a1}\n...",...}
+# → {"truncated":true,"outline_text":"# 第一章 公司概况 [1-15] {e7f3a1}\n..."}
 
-# Step 4: Read a specific section
-xparse-cli read_content a1b2c3d4e5f6 e7f3a1
-# → {"element_type":"section","content_markdown":"...","children":[...]}
+xparse-cli get_outline a1b2c3d4e5f6 --parent-id e7f3a1
+# → {"truncated":false,"outline_text":"## 1.1 基本情况 [1-5] {a3b2c1}\n## 1.2 主营业务 [6-15] {d4e5f6}"}
 
-# Search for specific content
-xparse-cli search_text a1b2c3d4e5f6 "净利润"
-# → {"total_matches":5,"matches":[{"match_text":"净利润","context":"...","heading":"主要财务数据",...}]}
+# Step 4: Extract — ALL calls in one parallel batch
+xparse-cli read_content a1b2c3d4e5f6 a3b2c1   # ┐
+xparse-cli read_content a1b2c3d4e5f6 d4e5f6   # ├─ parallel
+xparse-cli search_text  a1b2c3d4e5f6 "净利润"  # ┘
 ```
+
+## Cache & Setup
+
+Cache stored at `~/.xparse-cli/` (no TTL, permanent until cleaned):
+```bash
+xparse-cli cache ls       # List cached documents
+xparse-cli cache clean    # Remove all cache
+```
+
+**Install** (only if `xparse-cli version` returns "command not found"):
+
+| Platform | Command |
+|----------|---------|
+| Linux / macOS | `source <(curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.sh)` |
+| Windows | `irm https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.ps1 \| iex` |
+
+If installed but not found, try: `~/.local/bin/xparse-cli version`
+
+Update: `xparse-cli update`
