@@ -13,6 +13,7 @@ import (
 var (
 	searchRegex      bool
 	searchMaxResults int
+	searchScope      string
 )
 
 var searchTextCmd = &cobra.Command{
@@ -32,6 +33,7 @@ Examples:
 func init() {
 	searchTextCmd.Flags().BoolVar(&searchRegex, "regex", false, "Use regex matching (default: keyword substring)")
 	searchTextCmd.Flags().IntVar(&searchMaxResults, "max-results", 20, "Maximum number of results")
+	searchTextCmd.Flags().StringVar(&searchScope, "scope", "", "Limit search to this element_id and its descendants")
 }
 
 // searchOutput is the JSON output of search_text.
@@ -65,6 +67,18 @@ func runSearchText(cmd *cobra.Command, args []string) error {
 		return generalErr("failed to read cache: "+err.Error(), "")
 	}
 
+	// Resolve scope filter
+	var scopeSet map[string]bool
+	if searchScope != "" {
+		fullScopeID := resolveElementID(searchScope, result.Elements, result.TitleTree)
+		if fullScopeID == "" {
+			return generalErr("scope element_id '"+searchScope+"' not found",
+				"[fix] use element_id from get_outline or search_text output")
+		}
+		scopeSet = make(map[string]bool)
+		collectDescendants(fullScopeID, result.Elements, scopeSet)
+	}
+
 	// Build outline entries for heading index
 	entries := flattenTitleTree(result.TitleTree, result.Elements)
 	assignShortIDs(entries)
@@ -85,6 +99,9 @@ func runSearchText(cmd *cobra.Command, args []string) error {
 	var matches []searchMatch
 	for _, elem := range result.Elements {
 		if elem.Text == "" {
+			continue
+		}
+		if scopeSet != nil && !scopeSet[elem.ElementID] {
 			continue
 		}
 		if len(matches) >= searchMaxResults {
@@ -224,4 +241,14 @@ func findParentID(elementID string, elements []models.Element) string {
 		}
 	}
 	return ""
+}
+
+// collectDescendants adds targetID and all its descendants (via parent_id chain) to the set.
+func collectDescendants(targetID string, elements []models.Element, set map[string]bool) {
+	set[targetID] = true
+	for _, elem := range elements {
+		if elem.Metadata != nil && elem.Metadata.ParentID == targetID {
+			collectDescendants(elem.ElementID, elements, set)
+		}
+	}
 }
