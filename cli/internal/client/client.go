@@ -21,8 +21,8 @@ const (
 	PaidAPIBaseURL   = "https://api.textin.com"
 	PaidParseAPIPath = "/api/v1/xparse/parse/sync"
 
-	FreeAPIBaseURL   = "https://img2word-copy.ai.intsig.net"
-	FreeParseAPIPath = "/ai/service/v3/pdf_to_markdown"
+	FreeAPIBaseURL   = "https://api.textin.com"
+	FreeParseAPIPath = "/api/v1/agent/parse/sync"
 )
 
 // APIMode represents free vs paid API selection.
