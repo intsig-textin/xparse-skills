@@ -23,7 +23,33 @@ Step 3: Navigate       → get_outline / search_text / read_pages (see Navigatio
 Step 4: Extract        → read_content with exact element_id(s)
 ```
 
-**Parallelism rule** (applies to Step 3–4): `read_content`, `read_pages`, and `search_text` are read-only cache operations. Collect ALL needed element_ids first, then issue ALL calls in a **single parallel batch** — never loop one at a time.
+## ⚠️ Critical: Plan-then-Batch Execution
+
+**This is the #1 rule for efficiency. Violations waste 50-70% of tokens.**
+
+### Plan Phase (after get_outline)
+
+Before ANY `read_content` call, complete ALL navigation:
+1. List ALL section IDs needed for the user's question
+2. If `truncated=true`, do ALL `--parent-id` drill-downs to collect IDs
+3. Use `search_text` to locate specific data points
+
+### Execute Phase (single batch)
+
+Issue ALL `read_content` / `search_text` calls in **ONE tool-call message**.
+
+```
+✅ CORRECT: One message with 8 parallel read_content calls → 1 turn
+❌ WRONG:   8 separate messages each with 1 read_content  → 8 turns
+```
+
+**Why this matters**: Each additional turn re-reads the entire context. 10 serial calls on a 30K-token context = 300K input tokens wasted. One parallel batch = 30K total.
+
+### Budget Limits
+
+- Target: **≤8 `read_content` calls** per task
+- Prefer reading a **parent section** (includes children) over reading each child separately
+- Use `search_text` for fact-finding (numbers, names, dates) — the `context` field often has the answer without needing `read_content`
 
 ## Navigation Decision Table
 
@@ -38,13 +64,20 @@ Step 4: Extract        → read_content with exact element_id(s)
 
 **Rule**: never call `read_content` with a guessed or top-level element_id when `truncated=true`. Always drill down via `--parent-id` first.
 
+## Prefer `search_text` Over `read_content` for Facts
+
+When extracting specific data points (revenue, profit, percentages, names):
+- Call `search_text` first — the `context` field (±surrounding text) often contains the answer
+- Only escalate to `read_content` if you need full table structure or surrounding paragraph context
+- For large sections (>30 pages), ALWAYS use `search_text --scope` before `read_content`
+
 ## Command Reference
 
 | Command | Returns | Notes |
 |---------|---------|-------|
 | `xparse-cli get_doc_info <filepath>` | `doc_id`, `page_count`, `doc_type` | Local, instant. Always call first. |
 | `xparse-cli ensure_parsed <doc_id> <page_count>` | `success`, `cached`, `total_elements`, `total_titles` | Idempotent. >50 pages auto-segments (50pp/segment). Only command that writes cache. |
-| `xparse-cli get_outline <doc_id> [--depth N] [--parent-id <id>]` | `has_toc`, `outline_text`, `entries[]`, `truncated`, `total_titles` | Default depth=2. `--depth 0` for all. `outline_text` always has `{element_id}` inline. |
+| `xparse-cli get_outline <doc_id> [--depth N] [--parent-id <id>]` | `has_toc`, `outline_text`, `entries[]`, `truncated`, `total_titles` | Default depth=2. If `ensure_parsed` returned `total_titles`>30, use `--depth 1`. `--depth 0` for all. `outline_text` always has `{element_id}` inline. |
 | `xparse-cli read_content <doc_id> <element_id>` | section→`content_markdown`,`children[]`; table→`markdown`,`html`; paragraph→`content_markdown` | Auto-detects type. ~1-5K tokens for typical section, ~500 tokens for table/paragraph. |
 | `xparse-cli read_pages <doc_id> <start> <end>` | per-page `content_markdown`, `tables[]`, `images[]` | Max 20 pages/call. ~500-1K tokens/page. Use when no heading structure. |
 | `xparse-cli search_text <doc_id> <pattern> [--regex] [--max-results N] [--scope <element_id>]` | `matches[]` with `element_id`, `context`, `heading_ref_id`, `page` | Case-insensitive substring by default. Max 20 results default. `--scope` limits to section and descendants. |
@@ -55,7 +88,7 @@ Step 4: Extract        → read_content with exact element_id(s)
 - Prefer `search_text` over `read_content` for large sections (>30 pages) — get precise hits first, then extract only what's needed.
 - For large documents with high-frequency keywords, use `search_text --scope <section_id>` to avoid irrelevant matches filling up `max-results`.
 - `read_pages` of 20 pages ≈ 10-20K tokens. Split into smaller ranges if context budget is tight.
-- When `total_titles` > 50, always use `--parent-id` drill-down rather than `--depth 0`.
+- When `ensure_parsed` returns `total_titles` > 30, use `get_outline --depth 1` initially, then `--parent-id` drill-down only for relevant branches.
 
 ### Key details
 
@@ -88,17 +121,34 @@ xparse-cli get_doc_info /path/to/annual-report.pdf
 xparse-cli ensure_parsed a1b2c3d4e5f6 120
 # → {"success":true,"cached":false,"segments":3,"total_elements":892,"total_titles":45}
 
-# Step 3: Navigate (truncated=true → drill down)
-xparse-cli get_outline a1b2c3d4e5f6
-# → {"truncated":true,"outline_text":"# 第一章 公司概况 [1-15] {e7f3a1}\n..."}
+# Step 3: Navigate — total_titles=45 (from ensure_parsed) > 30, so use depth 1
+xparse-cli get_outline a1b2c3d4e5f6 --depth 1
+# → {"truncated":true,"outline_text":"# 第一章 公司概况 [1-15] {e7f3a1}\n# 第二章 财务 [16-80] {b2c3d4}\n..."}
 
 xparse-cli get_outline a1b2c3d4e5f6 --parent-id e7f3a1
 # → {"truncated":false,"outline_text":"## 1.1 基本情况 [1-5] {a3b2c1}\n## 1.2 主营业务 [6-15] {d4e5f6}"}
 
-# Step 4: Extract — ALL calls in one parallel batch
+xparse-cli get_outline a1b2c3d4e5f6 --parent-id b2c3d4
+# → {"truncated":false,"outline_text":"## 2.1 收入分析 [16-30] {f1a2b3}\n## 2.2 利润分析 [31-50] {c4d5e6}"}
+
+# Step 4: Execute — ALL calls in ONE parallel batch (not one per turn!)
 xparse-cli read_content a1b2c3d4e5f6 a3b2c1   # ┐
-xparse-cli read_content a1b2c3d4e5f6 d4e5f6   # ├─ parallel
+xparse-cli read_content a1b2c3d4e5f6 d4e5f6   # │
+xparse-cli read_content a1b2c3d4e5f6 f1a2b3   # ├─ ALL in one tool-call message
+xparse-cli read_content a1b2c3d4e5f6 c4d5e6   # │
 xparse-cli search_text  a1b2c3d4e5f6 "净利润"  # ┘
+```
+
+**Anti-pattern (DO NOT do this):**
+```bash
+# ❌ WRONG: Each call in a separate turn
+# Turn 1:
+xparse-cli read_content a1b2c3d4e5f6 a3b2c1
+# Turn 2 (after reading result):
+xparse-cli read_content a1b2c3d4e5f6 d4e5f6
+# Turn 3 (after reading result):
+xparse-cli read_content a1b2c3d4e5f6 f1a2b3
+# ... This wastes 3x the input tokens!
 ```
 
 ## Cache & Setup
