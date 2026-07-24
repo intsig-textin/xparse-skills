@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -28,19 +29,20 @@ const (
 type APIMode string
 
 const (
-	APIModeAuto APIMode = "" // auto: paid if key exists, else free
+	APIModeAuto APIMode = "auto" // auto: paid if a supported credential exists, else free
 	APIModeFree APIMode = "free"
 	APIModePaid APIMode = "paid"
 )
 
 // XParserClient wraps HTTP calls to the Textin xParser API.
 type XParserClient struct {
-	AppID      string
-	SecretCode string
-	BaseURL    string
-	ParsePath  string
-	IsFreeAPI  bool
-	HTTPClient *http.Client
+	AppID       string
+	SecretCode  string
+	BearerToken string
+	BaseURL     string
+	ParsePath   string
+	IsFreeAPI   bool
+	HTTPClient  *http.Client
 }
 
 // ── Request config structures (multipart/form-data "config" field) ──
@@ -207,13 +209,16 @@ func resolveAPIMode(mode APIMode, cred *config.CredentialSource) (isFree bool) {
 }
 
 // newXParserClient creates a client configured for free or paid API.
-func newXParserClient(cmd *cobra.Command, cred *config.CredentialSource, isFree bool) *XParserClient {
+func newXParserClient(cmd *cobra.Command, cred *config.CredentialSource, bearerToken string, isFree bool) *XParserClient {
 	cfg, _ := config.Load()
 
 	var baseURL, parsePath string
 	if isFree {
 		baseURL = freeAPIBaseURL
 		parsePath = freeParseAPIPath
+		if (cmd != nil && cmd.Flags().Changed("base-url")) || strings.TrimSpace(os.Getenv("XPARSE_BASE_URL")) != "" {
+			baseURL = config.GetBaseURL(cmd, cfg)
+		}
 	} else {
 		baseURL = config.GetBaseURL(cmd, cfg)
 		parsePath = paidParseAPIPath
@@ -225,12 +230,13 @@ func newXParserClient(cmd *cobra.Command, cred *config.CredentialSource, isFree 
 	}
 
 	return &XParserClient{
-		AppID:      cred.AppID,
-		SecretCode: cred.SecretCode,
-		BaseURL:    baseURL,
-		ParsePath:  parsePath,
-		IsFreeAPI:  isFree,
-		HTTPClient: httpClient,
+		AppID:       cred.AppID,
+		SecretCode:  cred.SecretCode,
+		BearerToken: bearerToken,
+		BaseURL:     baseURL,
+		ParsePath:   parsePath,
+		IsFreeAPI:   isFree,
+		HTTPClient:  httpClient,
 	}
 }
 
@@ -297,7 +303,14 @@ func (c *XParserClient) ParseURL(fileURL string, opts *ParseOptions) (*ParseResp
 
 func (c *XParserClient) setAuthHeaders(req *http.Request) {
 	req.Header.Set("X-From", "cli")
-	if !c.IsFreeAPI && c.AppID != "" && c.SecretCode != "" {
+	if c.IsFreeAPI {
+		return
+	}
+	if c.BearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.BearerToken)
+		return
+	}
+	if c.AppID != "" && c.SecretCode != "" {
 		req.Header.Set("x-ti-app-id", c.AppID)
 		req.Header.Set("x-ti-secret-code", c.SecretCode)
 	}
