@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/intsig-textin/xparse-skills/cli/internal/config"
 )
@@ -16,7 +17,10 @@ var authShow bool
 var authCmd = &cobra.Command{
 	Use:   "auth",
 	Short: "Configure Textin API credentials",
-	Long: `Configure your Textin xParser API credentials (App ID and Secret Code).
+	Long: `Configure and inspect Textin xParser authentication.
+
+Running 'xparse-cli auth' without a subcommand preserves the legacy AppKey
+setup behavior. Use auth device or auth browser for OAuth.
 
 Get your credentials:
   https://www.textin.com/user/login?redirect=%252Fconsole%252Fdashboard%252Fsetting&from=xparse-parse-skill
@@ -25,8 +29,11 @@ Credentials are resolved in this order:
   1. --app-id / --secret-code flags
   2. XPARSE_APP_ID / XPARSE_SECRET_CODE environment variables
   3. ~/.xparse-cli/config.yaml (set via 'xparse-cli auth')`,
-	Example: `  xparse-cli auth              # Interactive setup, saves to ~/.xparse-cli/config.yaml
-  xparse-cli auth --show       # Show current credential source and masked values
+	Example: `  xparse-cli auth                   # Legacy interactive AppKey setup
+  xparse-cli auth --show            # Show current AppKey source and masked values
+  xparse-cli auth device             # OAuth Device Flow
+  xparse-cli auth browser            # OAuth Authorization Code + PKCE
+  xparse-cli auth status --output=json
 
   # Environment variables (useful for CI/CD):
   export XPARSE_APP_ID=your_app_id
@@ -109,7 +116,14 @@ func runAuthSetup() error {
 	} else {
 		fmt.Print("Enter your Secret Code (x-ti-secret-code): ")
 	}
-	secretCode, err := reader.ReadString('\n')
+	var secretCode string
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		value, readErr := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Println()
+		secretCode, err = string(value), readErr
+	} else {
+		secretCode, err = reader.ReadString('\n')
+	}
 	if err != nil {
 		return fmt.Errorf("failed to read input: %w", err)
 	}
@@ -126,7 +140,7 @@ func runAuthSetup() error {
 		return fmt.Errorf("failed to save credentials: %w", err)
 	}
 
-	fmt.Println("Credentials saved to ~/.xparse-cli/config.yaml")
+	fmt.Printf("Credentials saved to %s\n", config.Path())
 	return nil
 }
 

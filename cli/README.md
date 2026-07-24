@@ -117,12 +117,36 @@ export XPARSE_SECRET_CODE=your_secret_code
 xparse-cli parse report.pdf --api paid
 ```
 
+也可以使用 OAuth。正式二进制默认使用无 Secret 的 public client
+`cli_textin_xparse`；私有部署可以通过 flag、环境变量或配置文件覆盖：
+
+```bash
+export XPARSE_OAUTH_CLIENT_ID=cli_your_registered_client
+
+# Device Flow（服务器/Agent 推荐）
+xparse-cli auth device --open-browser=never
+
+# 本地桌面 Authorization Code + PKCE
+xparse-cli auth browser
+
+# 显式使用 OAuth 调用 paid API
+xparse-cli parse report.pdf --api paid --auth-method oauth
+```
+
+WorkBuddy 等 Connector 应设置独立的 `XPARSE_CONFIG_DIR`，避免登录或登出影响终端中
+默认的 `~/.xparse-cli` 凭证。
+
 ## 命令一览
 
 | 命令 | 说明 |
 |------|------|
 | `xparse-cli parse` | 解析文档，输出 Markdown / JSON |
-| `xparse-cli auth` | 配置 API 凭证（交互式） |
+| `xparse-cli auth` | 兼容旧版：配置 AppKey 凭证（交互式） |
+| `xparse-cli auth app-key` | 配置 AppKey 凭证 |
+| `xparse-cli auth device` | OAuth Device Flow 登录 |
+| `xparse-cli auth browser` | OAuth Authorization Code + PKCE 登录 |
+| `xparse-cli auth status` | 只读查看登录状态 |
+| `xparse-cli auth logout` | 删除指定认证方式的本地凭证 |
 | `xparse-cli config` | 管理配置（show / set / reset / path） |
 | `xparse-cli download` | 下载解析结果中 elements 的图片 |
 | `xparse-cli update` | 自更新 CLI 到最新版本 |
@@ -133,7 +157,8 @@ xparse-cli parse report.pdf --api paid
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `--view` | `markdown` | 输出视图：`markdown`、`json` |
-| `--api` | _(auto)_ | API 模式：`free`、`paid` |
+| `--api` | `auto` | API 模式：`auto`、`free`、`paid` |
+| `--auth-method` | _(自动)_ | paid API 认证：`app-key`、`oauth` |
 | `--page-range` | | 页码范围：`"1-5"` 或 `"1-2,5-10"` |
 | `--password` | | 加密文档密码 |
 | `--include-hierarchy` | `true` | 元素层级关系与父子关联，默认开启。为 `false` 时关闭 |
@@ -228,6 +253,30 @@ xparse-cli parse report.pdf --verbose
 | 1 | 命令行参数 | `--app-id` 和 `--secret-code` |
 | 2 | 环境变量 | `XPARSE_APP_ID` 和 `XPARSE_SECRET_CODE` |
 | 3 | 配置文件 | `~/.xparse-cli/config.yaml` |
+
+AppKey 与 OAuth Token 分开保存：
+
+```text
+~/.xparse-cli/config.yaml       # AppKey 和非敏感 OAuth 偏好
+~/.xparse-cli/oauth-token.json  # OAuth Access/Refresh Token
+```
+
+目录权限固定为 `0700`，凭证文件固定为 `0600`，更新通过 fsync + rename 原子替换。
+`xparse-cli config reset` 只重置 YAML，不会删除 OAuth Token；请使用
+`xparse-cli auth logout --method oauth|app-key|all` 精确登出。
+
+OAuth 参数优先级：
+
+| 参数 | 优先级 |
+|------|--------|
+| Client ID | `--client-id` > `XPARSE_OAUTH_CLIENT_ID` > `oauth.client_id` > public default `cli_textin_xparse` |
+| Scope | `--scope` > `XPARSE_OAUTH_SCOPE` > `oauth.scope` > `ocr:*` |
+| Browser redirect | `--redirect-uri` > `XPARSE_OAUTH_REDIRECT_URI` > `oauth.redirect_uri` > `http://127.0.0.1:8085/callback` |
+| Base URL | `--base-url` > `XPARSE_BASE_URL` > `base_url` > `https://api.textin.com` |
+
+`--api auto` 未显式指定认证方式时保持旧版 AppKey 优先；没有 AppKey 时才选择有效
+OAuth 会话，二者都没有时使用 free API。显式选择的 OAuth 或 AppKey 失败时不会切换
+到另一种凭证。
 
 ## 退出码与错误处理
 

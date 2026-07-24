@@ -1,6 +1,7 @@
-# TextIn Key Setup
+# TextIn AppKey Setup
 
-Configure paid API credentials to remove file size limits and increase daily quota.
+This page covers the legacy standalone AppKey flow. For Device OAuth, browser
+PKCE, and WorkBuddy login, use [authentication.md](authentication.md).
 
 ## When to Configure
 
@@ -10,13 +11,13 @@ Configure paid API credentials to remove file size limits and increase daily quo
 
 ## Setup Steps
 
-### Option 1: Interactive Setup (recommended)
+### Option 1: Interactive standalone setup
 
 ```bash
-xparse-cli auth                    # Interactive credential setup
+xparse-cli auth app-key
 ```
 
-Follow the prompts to enter your `APP_ID` and `SECRET_CODE` from [TextIn Console](https://www.textin.com/console/dashboard/setting). Credentials are saved to `~/.xparse-cli/config.yaml`.
+Follow the prompts to enter your `APP_ID` and `SECRET_CODE` from [TextIn Console](https://www.textin.com/console/dashboard/setting). Credentials are saved to `~/.xparse-cli/config.yaml`. Do not use this flow to collect credentials inside WorkBuddy; reconnect the Connector instead.
 
 ### Option 2: Environment Variables
 
@@ -30,8 +31,8 @@ export XPARSE_SECRET_CODE=<your_secret_code>
 ### Verify Setup
 
 ```bash
-xparse-cli auth --show             # Show current credential source
-xparse-cli parse <FILE>            # Should succeed without "unauthorized" errors
+xparse-cli auth --show
+xparse-cli parse <FILE> --api paid --auth-method app-key
 ```
 
 Credential priority: CLI flags → env vars → `~/.xparse-cli/config.yaml`

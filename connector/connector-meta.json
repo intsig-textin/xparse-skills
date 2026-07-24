@@ -1,0 +1,19 @@
+{
+  "name": "TextIn xParse",
+  "description": "Parse documents into Markdown or structured JSON with TextIn xParse.",
+  "description_zh": "通过自然语言解析 PDF、图片和 Office 文档，输出 Markdown 或结构化 JSON。",
+  "description_en": "Parse PDFs, images, and Office documents into Markdown or structured JSON.",
+  "source": "textin-xparse",
+  "type": "cli",
+  "minWorkbuddyVersion": "5.0.0",
+  "examples_zh": [
+    "解析这个 PDF 并总结主要内容",
+    "把这份合同转换成 Markdown",
+    "提取这个文档的表格结构"
+  ],
+  "examples_en": [
+    "Parse this PDF and summarize the key points",
+    "Convert this contract to Markdown",
+    "Extract the table structure from this document"
+  ]
+}

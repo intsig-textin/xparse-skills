@@ -17,20 +17,21 @@ import (
 // ── V1 parse flags ──
 
 var (
-	parseView                     string // json | markdown
-	parseAPI                      string // free | paid
-	parsePageRangeFlag            string // "1-5" or "1-2,5-10"
-	parsePassword                 string
-	parseIncludeHierarchy         string
-	parseIncludeInlineObjects     string
-	parseIncludeCharDetail        string
-	parseIncludeImageData         string
-	parseIncludeTableStructure    string
-	parseIncludePages             string
-	parseIncludeTitleTree         string
-	parseTableView                string // html | markdown
-	parseListFile                 string
-	parseOutput                   string
+	parseView                  string // json | markdown
+	parseAPI                   string // free | paid
+	parseAuthMethod            string // app-key | oauth
+	parsePageRangeFlag         string // "1-5" or "1-2,5-10"
+	parsePassword              string
+	parseIncludeHierarchy      string
+	parseIncludeInlineObjects  string
+	parseIncludeCharDetail     string
+	parseIncludeImageData      string
+	parseIncludeTableStructure string
+	parseIncludePages          string
+	parseIncludeTitleTree      string
+	parseTableView             string // html | markdown
+	parseListFile              string
+	parseOutput                string
 )
 
 var parseCmd = &cobra.Command{
@@ -69,7 +70,8 @@ func init() {
 	rootCmd.AddCommand(parseCmd)
 
 	parseCmd.Flags().StringVar(&parseView, "view", "markdown", "Output view: markdown, json")
-	parseCmd.Flags().StringVar(&parseAPI, "api", "", "API mode: free, paid (default: paid if key exists, else free)")
+	parseCmd.Flags().StringVar(&parseAPI, "api", "", "API mode: auto, free, paid (default: auto)")
+	parseCmd.Flags().StringVar(&parseAuthMethod, "auth-method", "", "Paid API authentication: app-key, oauth")
 	parseCmd.Flags().StringVar(&parsePageRangeFlag, "page-range", "", `Page range, e.g. "1-5" or "1-2,5-10"`)
 	parseCmd.Flags().StringVar(&parsePassword, "password", "", "Password for encrypted documents")
 	parseCmd.Flags().StringVar(&parseIncludeHierarchy, "include-hierarchy", "", "Include element hierarchy and parent-child associations: true, false (default true)")
@@ -111,11 +113,13 @@ func runParse(cmd *cobra.Command, args []string) error {
 	// Validate --api
 	var apiMode APIMode
 	switch parseAPI {
-	case "", "free", "paid":
+	case "", "auto":
+		apiMode = APIModeAuto
+	case "free", "paid":
 		apiMode = APIMode(parseAPI)
 	default:
-		return usageErr(exitcode.ErrInvalidAPI,
-			"[fix] use --api free or --api paid")
+		return usageErr("invalid --api value, must be 'auto', 'free', or 'paid'",
+			"[fix] use --api auto, --api free, or --api paid")
 	}
 
 	// Validate capability flags
@@ -196,16 +200,25 @@ func runParse(cmd *cobra.Command, args []string) error {
 			"[ask human] run xparse-cli auth or set XPARSE_APP_ID and XPARSE_SECRET_CODE env vars")
 	}
 
-	// Determine API mode
-	isFree := resolveAPIMode(apiMode, credSrc)
-
-	// --api paid requires credentials
-	if !isFree && (credSrc.AppID == "" || credSrc.SecretCode == "") {
-		return usageErr(exitcode.ErrPaidNoCreds,
-			"[ask human] run xparse-cli auth; or [fix] re-run with --api free")
+	cfg, err := config.Load()
+	if err != nil {
+		return generalErr(exitcode.ErrCredentialsConfig,
+			"[ask human] check xparse-cli config show")
+	}
+	selection, err := selectParseAuthentication(cmd, apiMode, parseAuthMethod, credSrc, cfg)
+	if err != nil {
+		return err
+	}
+	bearerToken := ""
+	if selection.Method == authMethodOAuth {
+		bearerToken, err = loadOAuthAccessToken(cmd.Context(), cmd, cfg)
+		if err != nil {
+			return generalErr("OAuth authentication failed",
+				"[ask human] run xparse-cli auth device or xparse-cli auth browser")
+		}
 	}
 
-	client := newXParserClient(cmd, credSrc, isFree)
+	client := newXParserClient(cmd, credSrc, bearerToken, selection.IsFree)
 
 	opts := &ParseOptions{
 		PageRange:             parsePageRangeFlag,
@@ -277,6 +290,9 @@ func runBatchParse(client *XParserClient, sources []string, opts *ParseOptions) 
 	}
 	if parseAPI != "" {
 		retryBase += " --api " + parseAPI
+	}
+	if parseAuthMethod != "" {
+		retryBase += " --auth-method " + parseAuthMethod
 	}
 	if opts.PageRange != "" {
 		retryBase += " --page-range " + opts.PageRange
@@ -414,7 +430,6 @@ func saveResult(resp *ParseResponse, source string, outputPath string) (string, 
 
 	return outPath, nil
 }
-
 
 // ── error helpers ──
 

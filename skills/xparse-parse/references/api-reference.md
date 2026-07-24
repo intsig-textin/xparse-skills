@@ -22,12 +22,12 @@ xparse-cli parse <FILE> [options]
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `--include-hierarchy` | flag | on | Parent-child relationships and element associations |
-| `--include-inline-objects` | flag | off | Formulas, handwriting, checkboxes, embedded images |
+| `--include-inline-objects` | flag | on | Formulas, handwriting, checkboxes, embedded images |
 | `--include-char-details` | flag | off | Character-level coordinates and OCR confidence scores |
-| `--include-image-data` | flag | off | Image URLs and Base64 encoding |
-| `--include-table-structure` | flag | off | Structured table cell data with coordinates |
-| `--include-pages` | flag | off | Per-page metadata and preview images |
-| `--include-title-tree` | flag | off | Hierarchical document outline |
+| `--include-image-data` | flag | on | Image URLs and Base64 encoding |
+| `--include-table-structure` | flag | on | Structured table cell data with coordinates |
+| `--include-pages` | flag | on | Per-page metadata and preview images |
+| `--include-title-tree` | flag | on | Hierarchical document outline |
 
 ### Output Options
 

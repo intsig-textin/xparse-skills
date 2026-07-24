@@ -5,10 +5,12 @@
 ## Paid API (optional, higher quota)
 
 ```bash
-xparse-cli auth                                     # Interactive credential setup
+xparse-cli auth app-key                            # Interactive AppKey setup
+xparse-cli auth device --client-id <PUBLIC_CLIENT_ID>
+xparse-cli auth browser --client-id <PUBLIC_CLIENT_ID>
 ```
 
-Or set environment variables:
+For non-interactive AppKey automation, set both environment variables:
 
 ```bash
 export XPARSE_APP_ID=your_app_id
@@ -17,13 +19,16 @@ export XPARSE_SECRET_CODE=your_secret_code
 
 | `--api` value | Behavior |
 |---------------|----------|
-| _(omitted)_ | Paid if credentials exist, else free |
+| _(omitted)_ | Auto-select from the requested/available auth method, otherwise free |
 | `free` | Force free API |
-| `paid` | Force paid API |
+| `paid` | Force paid API; pair with `--auth-method app-key` or `oauth` when both are configured |
 
-Credential priority: CLI flags → env vars → `~/.xparse-cli/config.yaml`
+AppKey priority: CLI flags → env vars → config file. OAuth client ID priority:
+CLI flag → `XPARSE_OAUTH_CLIENT_ID` → config file → shipped public client.
+WorkBuddy keeps its credentials in an isolated directory and uses Device OAuth.
 
-See [textin-key-setup.md](textin-key-setup.md) for full credential setup.
+See [authentication.md](authentication.md) for all login modes and
+[textin-key-setup.md](textin-key-setup.md) for legacy AppKey setup.
 
 ## API Limits
 
@@ -34,7 +39,7 @@ See [textin-key-setup.md](textin-key-setup.md) for full credential setup.
 | 单次页数 | ≤ 50 页 | ≤ 1000 页 |
 | 每日页数 | 单 IP ≤ 1000 页/天（UTC+8 零点重置） | 按账户余额扣费，无每日上限 |
 | 频率控制 | 1 次/秒/IP | QPS 限流（按账户配置） |
-| 认证 | 无需认证（IP 标识） | AppKey + Secret |
+| 认证 | 无需认证（IP 标识） | OAuth Bearer 或 AppKey + Secret |
 
 > 遇到 40302（文件超限）、40307（每日额度用完）或 40303（格式不支持）时，参考 [error-handling.md](error-handling.md) 决定是否升级到付费 API。
 
@@ -74,7 +79,8 @@ xparse-cli parse document.pdf --output result.md
 | Single page only | `xparse-cli parse doc.pdf --page-range 3` |
 | Multiple page ranges | `xparse-cli parse doc.pdf --page-range 1-2,5-10` |
 | Character details & coordinates | `xparse-cli parse doc.pdf --view json --include-char-details --output ./parsed.json` |
-| Force paid API | `xparse-cli parse doc.pdf --api paid` |
+| Force paid OAuth | `xparse-cli parse doc.pdf --api paid --auth-method oauth` |
+| Force paid AppKey | `xparse-cli parse doc.pdf --api paid --auth-method app-key` |
 
 ## API Capabilities — What You Get by Default
 
