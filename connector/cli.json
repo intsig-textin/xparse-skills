@@ -1,0 +1,46 @@
+{
+  "init": {
+    "darwin": "curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.sh | sh",
+    "linux": "curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.sh | sh",
+    "win32": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"irm https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.ps1 | iex\""
+  },
+  "auth": {
+    "darwin": "\"$HOME/.local/bin/xparse-cli\" auth device --open-browser=never --output=jsonl",
+    "linux": "\"$HOME/.local/bin/xparse-cli\" auth device --open-browser=never --output=jsonl",
+    "win32": "\"%USERPROFILE%\\.xparse-cli\\bin\\xparse-cli.exe\" auth device --open-browser=never --output=jsonl"
+  },
+  "unAuth": {
+    "darwin": "\"$HOME/.local/bin/xparse-cli\" auth logout --method oauth",
+    "linux": "\"$HOME/.local/bin/xparse-cli\" auth logout --method oauth",
+    "win32": "\"%USERPROFILE%\\.xparse-cli\\bin\\xparse-cli.exe\" auth logout --method oauth"
+  },
+  "status": {
+    "darwin": "\"$HOME/.local/bin/xparse-cli\" auth status --output=json",
+    "linux": "\"$HOME/.local/bin/xparse-cli\" auth status --output=json",
+    "win32": "\"%USERPROFILE%\\.xparse-cli\\bin\\xparse-cli.exe\" auth status --output=json"
+  },
+  "statusMatchJson": {
+    "logged_in": "true",
+    "method": "oauth"
+  },
+  "authUrlDomain": "api.textin.com",
+  "env": {
+    "XPARSE_CONFIG_DIR": "$HOME/.workbuddy/connectors/skills/connector-textin-xparse/xparse-config",
+    "XPARSE_OAUTH_CLIENT_ID": "cli_textin_xparse"
+  },
+  "versionCheck": {
+    "command": {
+      "darwin": "\"$HOME/.local/bin/xparse-cli\" version",
+      "linux": "\"$HOME/.local/bin/xparse-cli\" version",
+      "win32": "\"%USERPROFILE%\\.xparse-cli\\bin\\xparse-cli.exe\" version"
+    },
+    "minVersion": "2.1.0",
+    "versionPattern": "xparse-cli version v?(\\d+\\.\\d+\\.\\d+)"
+  },
+  "authDeviceFlow": {
+    "uriPattern": "\"verification_uri_complete\"\\s*:\\s*\"(https?://[^\"]+)\"",
+    "codePattern": "\"user_code\"\\s*:\\s*\"([A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5})\"",
+    "defaultExpiresInSeconds": 240,
+    "codeEmbeddedInUri": true
+  }
+}

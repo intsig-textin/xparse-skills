@@ -7,10 +7,10 @@ Use this matrix to decide whether to STOP, RETRY, or CONFIGURE:
 | Error Category | Error Codes | Decision | Action |
 |---|---|---|---|
 | **Transient/Network** | 30203, 500, 50207 | RETRY (once) | Retry same command with backoff |
-| **Free Limit Hit** | 40307 | STOP + CONFIGURE | Show free-limit message, point to setup guide |
+| **Free Limit Hit** | 40307 | STOP + CONFIGURE | Standalone users may configure AppKey/OAuth; WorkBuddy users reconnect OAuth |
 | **Rate Limit** | 40306 | RETRY (with delay) | Reduce request frequency, retry later |
 | **File Size Exceeded** | 40302 | STOP + CONFIGURE or ADJUST | If ≤10MB: likely free limit → configure. If >10MB: suggest `--page-range` or paid API |
-| **Invalid Credentials** | 40101, 40102, 40103 | STOP + DEBUG | User's credentials are wrong. Check TextIn console |
+| **Invalid Credentials** | 40101, 40102, 40103 | STOP + DEBUG | AppKey users check TextIn console; OAuth users log in again |
 | **Insufficient Balance** | 40003 | STOP + INFORM | Paid account has no credits. User must top up |
 | **Unsupported File** | 40301, 40303, 40305, 40425, 40426 | STOP | File type/format not supported or corrupted. No retry |
 | **Invalid Parameters** | 40004, 40400, 40424, 40427 | STOP | Command was malformed. Show correct syntax |
@@ -30,11 +30,11 @@ Use this matrix to decide whether to STOP, RETRY, or CONFIGURE:
 - Unknown error or internal service error
 
 **What to say:**
-- Free limit: `The free parse limit has been reached. Configure your TextIn API credentials with your APP_ID and SECRET_CODE, then rerun the same parse command. See [TextIn setup guide] for details.`
+- Free limit: `The free parse limit has been reached. Log in to the TextIn xParse Connector or configure standalone paid authentication, then rerun the same parse command.`
 - File too large: `File exceeds 10MB free tier limit. Use --page-range to parse specific pages, or configure paid API credentials for unlimited file sizes.`
 - Unsupported file: `This file type is not supported. Supported formats: PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), OFD, Image files.`
 - Password required: `Document is password-protected. Rerun with --password <your_password>.`
-- Invalid credentials: `API credentials are invalid. Check your APP_ID and SECRET_CODE in the TextIn console at https://www.textin.com/console/dashboard/setting.`
+- Invalid credentials: `Authentication is invalid. Reconnect the WorkBuddy Connector, or check standalone AppKey credentials in the TextIn console.`
 
 ## Retry Policy
 
@@ -129,28 +129,20 @@ Agent action:
 2. Show: "API credentials are invalid. 
           Check your APP_ID and SECRET_CODE in TextIn console:
           https://www.textin.com/console/dashboard/setting"
-3. Suggest user re-run setup: bash ~/xparse-parse/setup.sh
+3. For standalone AppKey, direct the user to `textin-key-setup.md`.
+4. For OAuth, run `xparse-cli auth device` or reconnect the WorkBuddy Connector.
 ```
 
 ## Integration with TextIn Setup
 
 When free limit is hit or credentials needed:
 
-1. **Point to setup guide:** `~/xparse-parse/references/textin-key-setup.md`
-2. **User gets credentials** from https://www.textin.com/console/dashboard/setting
-3. **User exports env vars** (setup.sh can help)
-4. **Rerun same parse command** — no need to change anything else
-5. **All limits removed** — file size, daily quota
-
-If user is uncertain about setup:
-```
-Run: bash ~/xparse-parse/setup.sh
-
-This will help you:
-1. Get credentials from TextIn console
-2. Export XPARSE_APP_ID and XPARSE_SECRET_CODE
-3. Verify setup is working
-```
+1. **WorkBuddy:** reconnect the TextIn xParse Connector; never request its
+   tokens or device code in chat.
+2. **Standalone OAuth:** use `xparse-cli auth device` on terminals/servers or
+   `xparse-cli auth browser` on desktops.
+3. **Standalone AppKey:** follow `textin-key-setup.md`.
+4. **Rerun the same parse command** after authentication succeeds.
 
 ## Quick Diagnosis Flowchart
 

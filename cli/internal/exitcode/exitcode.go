@@ -46,7 +46,7 @@ type APIErrorInfo struct {
 	XRequestID     string // from API response
 	Retryable      bool
 	Suggestion     string
-	ContactSupport bool   // true = user/agent cannot resolve; show request_id for Textin support
+	ContactSupport bool // true = user/agent cannot resolve; show request_id for Textin support
 }
 
 // suggestionMap maps Textin API error codes to agent-actionable suggestions.
