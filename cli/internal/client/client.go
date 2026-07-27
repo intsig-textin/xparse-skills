@@ -1,4 +1,5 @@
-package cmd
+// Package client provides a shared HTTP client for the Textin xParser API.
+package client
 
 import (
 	"bytes"
@@ -18,11 +19,11 @@ import (
 
 // API endpoints.
 const (
-	paidAPIBaseURL   = "https://api.textin.com"
-	paidParseAPIPath = "/api/v1/xparse/parse/sync"
+	PaidAPIBaseURL   = "https://api.textin.com"
+	PaidParseAPIPath = "/api/v1/xparse/parse/sync"
 
-	freeAPIBaseURL   = "https://api.textin.com"
-	freeParseAPIPath = "/api/v1/agent/parse/sync"
+	FreeAPIBaseURL   = "https://api.textin.com"
+	FreeParseAPIPath = "/api/v1/agent/parse/sync"
 )
 
 // APIMode represents free vs paid API selection.
@@ -34,8 +35,8 @@ const (
 	APIModePaid APIMode = "paid"
 )
 
-// XParserClient wraps HTTP calls to the Textin xParser API.
-type XParserClient struct {
+// Client wraps HTTP calls to the Textin xParser API.
+type Client struct {
 	AppID       string
 	SecretCode  string
 	BearerToken string
@@ -45,22 +46,33 @@ type XParserClient struct {
 	HTTPClient  *http.Client
 }
 
-// ── Request config structures (multipart/form-data "config" field) ──
-
-// ParseRequestConfig is the JSON config sent as the "config" form field.
-type ParseRequestConfig struct {
-	Document     *DocumentConfig `json:"document,omitempty"`
-	Capabilities *Capabilities   `json:"capabilities"`
-	Scope        *Scope          `json:"scope,omitempty"`
+// ParseOptions holds parameters for an xparse API call.
+type ParseOptions struct {
+	PageRange             string // e.g. "1-5" or "1-2,5-10"
+	Password              string
+	IncludeHierarchy      bool
+	IncludeInlineObjects  bool
+	IncludeCharDetails    bool
+	IncludeImageData      bool
+	IncludeTableStructure bool
+	IncludePages          bool
+	IncludeTitleTree      bool
+	TableView             string // "html" | "markdown"
 }
 
-// DocumentConfig holds document-level settings.
-type DocumentConfig struct {
+// ── Request config structures ──
+
+type parseRequestConfig struct {
+	Document     *documentConfig `json:"document,omitempty"`
+	Capabilities *capabilities   `json:"capabilities"`
+	Scope        *scope          `json:"scope,omitempty"`
+}
+
+type documentConfig struct {
 	Password string `json:"password,omitempty"`
 }
 
-// Capabilities controls what the API returns.
-type Capabilities struct {
+type capabilities struct {
 	IncludeHierarchy      bool   `json:"include_hierarchy"`
 	IncludeInlineObjects  bool   `json:"include_inline_objects"`
 	IncludeCharDetails    bool   `json:"include_char_details"`
@@ -71,9 +83,34 @@ type Capabilities struct {
 	TableView             string `json:"table_view"`
 }
 
-// Scope controls the processing range.
-type Scope struct {
+type scope struct {
 	PageRange string `json:"page_range,omitempty"`
+}
+
+// BuildConfig constructs the JSON config string for the multipart "config" field.
+func (o *ParseOptions) BuildConfig() string {
+	cfg := parseRequestConfig{
+		Capabilities: &capabilities{
+			IncludeHierarchy:      o.IncludeHierarchy,
+			IncludeInlineObjects:  o.IncludeInlineObjects,
+			IncludeCharDetails:    o.IncludeCharDetails,
+			IncludeImageData:      o.IncludeImageData,
+			IncludeTableStructure: o.IncludeTableStructure,
+			Pages:                 o.IncludePages,
+			TitleTree:             o.IncludeTitleTree,
+			TableView:             o.TableView,
+		},
+	}
+
+	if o.Password != "" {
+		cfg.Document = &documentConfig{Password: o.Password}
+	}
+	if o.PageRange != "" {
+		cfg.Scope = &scope{PageRange: o.PageRange}
+	}
+
+	data, _ := json.Marshal(cfg)
+	return string(data)
 }
 
 // ── Response structures ──
@@ -86,17 +123,41 @@ type ParseResponse struct {
 	Data       *ParseData `json:"data,omitempty"`
 }
 
+// UnmarshalJSON 兼容 "data" 和 "result" 两种字段名。
+func (r *ParseResponse) UnmarshalJSON(b []byte) error {
+	type alias struct {
+		Code       int        `json:"code"`
+		Message    string     `json:"message"`
+		XRequestID string     `json:"x_request_id,omitempty"`
+		Data       *ParseData `json:"data,omitempty"`
+		Result     *ParseData `json:"result,omitempty"`
+	}
+	var a alias
+	if err := json.Unmarshal(b, &a); err != nil {
+		return err
+	}
+	r.Code = a.Code
+	r.Message = a.Message
+	r.XRequestID = a.XRequestID
+	if a.Data != nil {
+		r.Data = a.Data
+	} else {
+		r.Data = a.Result
+	}
+	return nil
+}
+
+// HasResult returns true if Data is present.
+func (r *ParseResponse) HasResult() bool {
+	return r.Data != nil
+}
+
 // GetMarkdown returns the markdown content from the response.
 func (r *ParseResponse) GetMarkdown() string {
 	if r.Data != nil {
 		return r.Data.Markdown
 	}
 	return ""
-}
-
-// HasResult returns true if Data is present.
-func (r *ParseResponse) HasResult() bool {
-	return r.Data != nil
 }
 
 // GetSuccessCount returns the number of successfully parsed pages.
@@ -149,87 +210,48 @@ type Summary struct {
 	DurationMs float64 `json:"duration_ms"`
 }
 
-// ParseOptions holds V1 parse parameters.
-type ParseOptions struct {
-	PageRange             string // e.g. "1-5" or "1-2,5-10"
-	Password              string
-	IncludeHierarchy      bool
-	IncludeInlineObjects  bool
-	IncludeCharDetails    bool
-	IncludeImageData      bool
-	IncludeTableStructure bool
-	IncludePages          bool
-	IncludeTitleTree      bool
-	TableView             string // "html" | "markdown"
-}
+// ── Client construction ──
 
-// buildConfig constructs the JSON config string for the multipart "config" field.
-// CLI defaults override API defaults to provide the richest output without extra flags.
-func (o *ParseOptions) buildConfig() string {
-	cfg := ParseRequestConfig{
-		Capabilities: &Capabilities{
-			IncludeHierarchy:      o.IncludeHierarchy,      // CLI default: true  (API default: true)
-			IncludeInlineObjects:  o.IncludeInlineObjects,  // CLI default: true  (API default: false)
-			IncludeCharDetails:    o.IncludeCharDetails,    // CLI default: false (API default: false)
-			IncludeImageData:      o.IncludeImageData,      // CLI default: true  (API default: false)
-			IncludeTableStructure: o.IncludeTableStructure, // CLI default: true  (API default: false)
-			Pages:                 o.IncludePages,          // CLI default: true  (API default: false)
-			TitleTree:             o.IncludeTitleTree,      // CLI default: true  (API default: false)
-			TableView:             o.TableView,             // CLI default: html  (API default: html)
-		},
-	}
-
-	if o.Password != "" {
-		cfg.Document = &DocumentConfig{Password: o.Password}
-	}
-
-	if o.PageRange != "" {
-		cfg.Scope = &Scope{PageRange: o.PageRange}
-	}
-
-	data, _ := json.Marshal(cfg)
-	return string(data)
-}
-
-// resolveAPIMode determines whether to use free or paid API.
-// Logic:
-//   - --api free  → free
-//   - --api paid  → paid (requires credentials)
-//   - default     → paid if credentials exist, else free
-func resolveAPIMode(mode APIMode, cred *config.CredentialSource) (isFree bool) {
+// ResolveAPIMode determines whether to use free or paid API.
+func ResolveAPIMode(mode APIMode, cred *config.CredentialSource) (isFree bool) {
 	switch mode {
 	case APIModeFree:
 		return true
 	case APIModePaid:
 		return false
 	default:
-		// Auto: use paid if credentials are available
 		return cred.AppID == "" || cred.SecretCode == ""
 	}
 }
 
-// newXParserClient creates a client configured for free or paid API.
-func newXParserClient(cmd *cobra.Command, cred *config.CredentialSource, bearerToken string, isFree bool) *XParserClient {
+// NewClient creates a client configured for free or paid API.
+// Pass a custom httpClient (e.g. verbose) or nil for default.
+func NewClient(cmd *cobra.Command, cred *config.CredentialSource, isFree bool, httpClient *http.Client) *Client {
+	return NewClientWithBearer(cmd, cred, "", isFree, httpClient)
+}
+
+// NewClientWithBearer creates a client that prefers OAuth Bearer
+// authentication over AppKey for paid API calls.
+func NewClientWithBearer(cmd *cobra.Command, cred *config.CredentialSource, bearerToken string, isFree bool, httpClient *http.Client) *Client {
 	cfg, _ := config.Load()
 
 	var baseURL, parsePath string
 	if isFree {
-		baseURL = freeAPIBaseURL
-		parsePath = freeParseAPIPath
+		baseURL = FreeAPIBaseURL
+		parsePath = FreeParseAPIPath
 		if (cmd != nil && cmd.Flags().Changed("base-url")) || strings.TrimSpace(os.Getenv("XPARSE_BASE_URL")) != "" {
 			baseURL = config.GetBaseURL(cmd, cfg)
 		}
 	} else {
 		baseURL = config.GetBaseURL(cmd, cfg)
-		parsePath = paidParseAPIPath
+		parsePath = PaidParseAPIPath
 	}
 
-	httpClient := &http.Client{}
-	if verboseFlag {
-		httpClient = newVerboseHTTPClient()
+	if httpClient == nil {
+		httpClient = &http.Client{}
 	}
 
-	return &XParserClient{
+	return &Client{
 		AppID:       cred.AppID,
 		SecretCode:  cred.SecretCode,
 		BearerToken: bearerToken,
@@ -240,8 +262,16 @@ func newXParserClient(cmd *cobra.Command, cred *config.CredentialSource, bearerT
 	}
 }
 
+// NewAutoClient creates a client with automatic free/paid detection.
+func NewAutoClient(cmd *cobra.Command, cred *config.CredentialSource, httpClient *http.Client) *Client {
+	isFree := ResolveAPIMode(APIModeAuto, cred)
+	return NewClient(cmd, cred, isFree, httpClient)
+}
+
+// ── API methods ──
+
 // ParseFile uploads a local file to the xParser API and returns the response.
-func (c *XParserClient) ParseFile(filePath string, opts *ParseOptions) (*ParseResponse, error) {
+func (c *Client) ParseFile(filePath string, opts *ParseOptions) (*ParseResponse, error) {
 	fileData, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file %s: %w", filePath, err)
@@ -250,7 +280,6 @@ func (c *XParserClient) ParseFile(filePath string, opts *ParseOptions) (*ParseRe
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
-	// file field
 	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create form file: %w", err)
@@ -259,8 +288,7 @@ func (c *XParserClient) ParseFile(filePath string, opts *ParseOptions) (*ParseRe
 		return nil, fmt.Errorf("failed to write file data: %w", err)
 	}
 
-	// config field (JSON string)
-	if err := writer.WriteField("config", opts.buildConfig()); err != nil {
+	if err := writer.WriteField("config", opts.BuildConfig()); err != nil {
 		return nil, fmt.Errorf("failed to write config field: %w", err)
 	}
 	writer.Close()
@@ -276,17 +304,15 @@ func (c *XParserClient) ParseFile(filePath string, opts *ParseOptions) (*ParseRe
 }
 
 // ParseURL sends a URL to the xParser API for remote file parsing.
-func (c *XParserClient) ParseURL(fileURL string, opts *ParseOptions) (*ParseResponse, error) {
+func (c *Client) ParseURL(fileURL string, opts *ParseOptions) (*ParseResponse, error) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
-	// file_url field
 	if err := writer.WriteField("file_url", fileURL); err != nil {
 		return nil, fmt.Errorf("failed to write file_url field: %w", err)
 	}
 
-	// config field (JSON string)
-	if err := writer.WriteField("config", opts.buildConfig()); err != nil {
+	if err := writer.WriteField("config", opts.BuildConfig()); err != nil {
 		return nil, fmt.Errorf("failed to write config field: %w", err)
 	}
 	writer.Close()
@@ -301,7 +327,7 @@ func (c *XParserClient) ParseURL(fileURL string, opts *ParseOptions) (*ParseResp
 	return c.doRequest(req)
 }
 
-func (c *XParserClient) setAuthHeaders(req *http.Request) {
+func (c *Client) setAuthHeaders(req *http.Request) {
 	req.Header.Set("X-From", "cli")
 	if c.IsFreeAPI {
 		return
@@ -316,7 +342,7 @@ func (c *XParserClient) setAuthHeaders(req *http.Request) {
 	}
 }
 
-func (c *XParserClient) doRequest(req *http.Request) (*ParseResponse, error) {
+func (c *Client) doRequest(req *http.Request) (*ParseResponse, error) {
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("API request failed: %w", err)

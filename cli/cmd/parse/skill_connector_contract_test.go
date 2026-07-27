@@ -203,7 +203,7 @@ func TestSkillUsesFormalCLIWithoutCredentialCollection(t *testing.T) {
 
 func readRepositoryFile(t *testing.T, pathParts ...string) []byte {
 	t.Helper()
-	parts := append([]string{"..", ".."}, pathParts...)
+	parts := append([]string{"..", "..", ".."}, pathParts...)
 	data, err := os.ReadFile(filepath.Join(parts...))
 	if err != nil {
 		t.Fatal(err)
