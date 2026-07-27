@@ -50,6 +50,9 @@ func TestLegacyConfigPathAndBaseURL(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XPARSE_CONFIG_DIR", "")
 	t.Setenv("XPARSE_BASE_URL", "")
+	if err := SetProfile(""); err != nil {
+		t.Fatal(err)
+	}
 
 	if want := filepath.Join(home, ".xparse-cli", "config.yaml"); Path() != want {
 		t.Fatalf("Path() = %q, want %q", Path(), want)
@@ -67,6 +70,44 @@ func TestLegacyConfigPathAndBaseURL(t *testing.T) {
 	}
 	if got := GetBaseURL(cmd, cfg); got != "https://flag.example" {
 		t.Fatalf("flag base URL = %q", got)
+	}
+}
+
+func TestWorkBuddyProfileUsesIsolatedDirectory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XPARSE_CONFIG_DIR", "")
+	if err := SetProfile(ProfileWorkBuddy); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = SetProfile("")
+	})
+
+	want := filepath.Join(home, ".xparse-cli", "profiles", "workbuddy", "config.yaml")
+	if got := Path(); got != want {
+		t.Fatalf("Path() = %q, want %q", got, want)
+	}
+}
+
+func TestExplicitConfigDirectoryOverridesProfile(t *testing.T) {
+	override := t.TempDir()
+	t.Setenv("XPARSE_CONFIG_DIR", override)
+	if err := SetProfile(ProfileWorkBuddy); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = SetProfile("")
+	})
+
+	if got, want := Path(), filepath.Join(override, "config.yaml"); got != want {
+		t.Fatalf("Path() = %q, want %q", got, want)
+	}
+}
+
+func TestRejectsUnsupportedProfile(t *testing.T) {
+	if err := SetProfile("../other"); err == nil {
+		t.Fatal("SetProfile accepted an unsupported profile")
 	}
 }
 
@@ -142,7 +183,7 @@ func TestOAuthDefaults(t *testing.T) {
 	if got := ResolveOAuthScope("", &Config{}); got != "ocr:*" {
 		t.Fatalf("scope = %q", got)
 	}
-	if got := ResolveOAuthRedirectURI("", &Config{}); got != "http://127.0.0.1:8085/callback" {
+	if got := ResolveOAuthRedirectURI("", &Config{}); got != "http://127.0.0.1:0/callback" {
 		t.Fatalf("redirect URI = %q", got)
 	}
 }

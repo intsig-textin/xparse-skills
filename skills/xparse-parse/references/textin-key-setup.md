@@ -19,6 +19,10 @@ xparse-cli auth app-key
 
 Follow the prompts to enter your `APP_ID` and `SECRET_CODE` from [TextIn Console](https://www.textin.com/console/dashboard/setting). Credentials are saved to `~/.xparse-cli/config.yaml`. Do not use this flow to collect credentials inside WorkBuddy; reconnect the Connector instead.
 
+Bare `xparse-cli auth` also exposes this option from its terminal menu. For
+scripts and piped input, bare `auth` preserves the previous direct AppKey
+prompt behavior.
+
 ### Option 2: Environment Variables
 
 For CI/automation, set environment variables:

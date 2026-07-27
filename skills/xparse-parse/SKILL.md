@@ -8,10 +8,37 @@ description: Parse PDFs, images, Office files, HTML, OFD, and other supported do
 Use the installed `xparse-cli` as the only parsing and authentication execution
 kernel. Do not reproduce its HTTP or OAuth logic in the Skill.
 
+## WorkBuddy command profile
+
+When this Skill is running inside WorkBuddy through the TextIn xParse
+Connector, every CLI invocation MUST use the explicit WorkBuddy profile:
+
+```bash
+xparse-cli --profile workbuddy <command> ...
+```
+
+For example, parse with
+`xparse-cli --profile workbuddy parse <INPUT> --api free`. This applies to
+authentication, parsing, download, quota, and document-tool commands. Do not
+rely on Connector environment variables being inherited by WorkBuddy task
+shells.
+
+Outside WorkBuddy, keep using the standalone `xparse-cli <command>` form.
+
+## API selection
+
+- Default to the free API and include `--api free` in every `parse` command.
+- Use `--api paid` only when the user explicitly asks to use the paid API.
+- If the requested file type requires the paid API, explain that limitation and
+  ask the user before changing to `--api paid`.
+- Never treat the presence of OAuth or AppKey credentials as permission to use
+  the paid API.
+
 ## Workflow
 
 1. Confirm the input path or URL.
-2. Run `xparse-cli parse <INPUT>` for Markdown.
+2. Run `xparse-cli --profile workbuddy parse <INPUT> --api free` in WorkBuddy,
+   or `xparse-cli parse <INPUT> --api free` elsewhere, for Markdown.
 3. Read the result before requesting more detail.
 4. Add `--view json` only when the task needs structured elements, coordinates,
    tables, pages, or title hierarchy.
@@ -46,7 +73,7 @@ If available, skip to **Quick start** below. If not found, install:
 Zero config — free API, no registration needed. Supports **PDF and images** only.
 
 ```bash
-xparse-cli parse report.pdf                         # Markdown → stdout
+xparse-cli parse report.pdf --api free              # Markdown → stdout
 ```
 
 > For Office, HTML, OFD, and other formats, [configure paid API credentials](references/textin-key-setup.md) first.
@@ -55,13 +82,13 @@ xparse-cli parse report.pdf                         # Markdown → stdout
 
 | Goal | Command |
 |------|---------|
-| Markdown to stdout | `xparse-cli parse <FILE>` |
-| JSON to stdout | `xparse-cli parse <FILE> --view json` |
-| Save markdown | `xparse-cli parse <FILE> --view markdown --output <DIR>` |
-| Save JSON | `xparse-cli parse <FILE> --view json --output <DIR>` |
-| Page range | `xparse-cli parse <FILE> --page-range 1-5` |
-| Encrypted doc | `xparse-cli parse <FILE> --password <PWD>` |
-| Character details (bbox, confidence, candidate per char) | `xparse-cli parse <FILE> --view json --output <DIR> --include-char-details` |
+| Markdown to stdout | `xparse-cli parse <FILE> --api free` |
+| JSON to stdout | `xparse-cli parse <FILE> --api free --view json` |
+| Save markdown | `xparse-cli parse <FILE> --api free --view markdown --output <DIR>` |
+| Save JSON | `xparse-cli parse <FILE> --api free --view json --output <DIR>` |
+| Page range | `xparse-cli parse <FILE> --api free --page-range 1-5` |
+| Encrypted doc | `xparse-cli parse <FILE> --api free --password <PWD>` |
+| Character details (bbox, confidence, candidate per char) | `xparse-cli parse <FILE> --api free --view json --output <DIR> --include-char-details` |
 | Explicit paid OAuth | `xparse-cli parse <FILE> --api paid --auth-method oauth` |
 | Explicit paid AppKey | `xparse-cli parse <FILE> --api paid --auth-method app-key` |
 
@@ -73,8 +100,8 @@ operation.
 ## Authentication boundary
 
 - In WorkBuddy, rely on the Connector's Device OAuth login and isolated
-  credential directory. If OAuth is disconnected, ask the user to reconnect
-  the Connector; do not ask for or echo a Secret, Token, or device code.
+  `workbuddy` profile. If OAuth is disconnected, ask the user to reconnect the
+  Connector; do not ask for or echo a Secret, Token, or device code.
 - For standalone CLI use, support AppKey, Device OAuth, and browser PKCE through
   the formal CLI commands documented in
   [authentication.md](references/authentication.md).
@@ -85,7 +112,7 @@ operation.
 ## Routing and stopping rules
 
 1. Confirm the document should be parsed with `xparse-parse`
-2. Run `xparse-cli parse <FILE> --output <DIR>`
+2. Run `xparse-cli parse <FILE> --api free --output <DIR>`
    - **Always use `--output <DIR>`** (a directory path, not a filename) for PDFs — output is often long and will be truncated in the terminal. Example: `xparse-cli parse report.pdf --output ./` saves `report.md` in the current directory.
 3. Read the result file
 4. Only add `--include-char-details` if the task specifically requires character-level detail (bbox, confidence)

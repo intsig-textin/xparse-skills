@@ -2,12 +2,17 @@
 
 > Installation and quick start see [SKILL.md](../SKILL.md).
 
+Inside WorkBuddy, insert `--profile workbuddy` immediately after `xparse-cli`
+for every command. Standalone CLI commands remain unchanged.
+
 ## Paid API (optional, higher quota)
 
 ```bash
+xparse-cli auth                                    # Standalone interactive menu
 xparse-cli auth app-key                            # Interactive AppKey setup
-xparse-cli auth device --client-id <PUBLIC_CLIENT_ID>
-xparse-cli auth browser --client-id <PUBLIC_CLIENT_ID>
+xparse-cli auth device                             # Uses the shipped public client
+xparse-cli auth browser                            # Uses the shipped public client
+xparse-cli auth browser --prompt=consent
 ```
 
 For non-interactive AppKey automation, set both environment variables:
@@ -23,9 +28,11 @@ export XPARSE_SECRET_CODE=your_secret_code
 | `free` | Force free API |
 | `paid` | Force paid API; pair with `--auth-method app-key` or `oauth` when both are configured |
 
-AppKey priority: CLI flags → env vars → config file. OAuth client ID priority:
-CLI flag → `XPARSE_OAUTH_CLIENT_ID` → config file → shipped public client.
-WorkBuddy keeps its credentials in an isolated directory and uses Device OAuth.
+AppKey priority: CLI flags → env vars → config file. Normal OAuth login uses
+the shipped public client automatically; private deployments may override it
+through a CLI flag, `XPARSE_OAUTH_CLIENT_ID`, or the config file.
+WorkBuddy keeps its credentials in the isolated `workbuddy` profile and uses
+Device OAuth.
 
 See [authentication.md](authentication.md) for all login modes and
 [textin-key-setup.md](textin-key-setup.md) for legacy AppKey setup.
