@@ -14,6 +14,9 @@ import (
 const configDirName = ".xparse-cli"
 const configFileName = "config.yaml"
 const DefaultOAuthClientID = "cli_textin_xparse"
+const ProfileWorkBuddy = "workbuddy"
+
+var activeProfile string
 
 // Config represents the configuration file structure.
 type Config struct {
@@ -32,8 +35,25 @@ type OAuthConfig struct {
 	RedirectURI string `yaml:"redirect_uri,omitempty"`
 }
 
-// Dir returns the credential directory. WorkBuddy can isolate its credentials
-// with XPARSE_CONFIG_DIR; standalone behavior remains ~/.xparse-cli.
+// SetProfile selects an isolated CLI profile for the current process.
+func SetProfile(profile string) error {
+	profile = strings.ToLower(strings.TrimSpace(profile))
+	switch profile {
+	case "", ProfileWorkBuddy:
+		activeProfile = profile
+		return nil
+	default:
+		return fmt.Errorf("unsupported profile %q", profile)
+	}
+}
+
+// Profile returns the active CLI profile.
+func Profile() string {
+	return activeProfile
+}
+
+// Dir returns the credential directory. XPARSE_CONFIG_DIR remains the most
+// specific override; named profiles otherwise live below ~/.xparse-cli.
 func Dir() (string, error) {
 	if dir := strings.TrimSpace(os.Getenv("XPARSE_CONFIG_DIR")); dir != "" {
 		return filepath.Clean(dir), nil
@@ -42,7 +62,11 @@ func Dir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("cannot get home directory: %w", err)
 	}
-	return filepath.Join(home, configDirName), nil
+	dir := filepath.Join(home, configDirName)
+	if activeProfile != "" {
+		dir = filepath.Join(dir, "profiles", activeProfile)
+	}
+	return dir, nil
 }
 
 // configPath returns the path to the config file.
@@ -185,6 +209,18 @@ func SetCredentials(appID, secretCode string) error {
 	}
 	cfg.AppID = appID
 	cfg.SecretCode = secretCode
+	cfg.DefaultAuthMethod = "app-key"
+	return Save(cfg)
+}
+
+// SetDefaultAuthMethod records an explicit user choice. An empty value restores
+// compatibility auto-selection, which remains AppKey-first.
+func SetDefaultAuthMethod(method string) error {
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+	cfg.DefaultAuthMethod = strings.TrimSpace(method)
 	return Save(cfg)
 }
 
@@ -233,7 +269,7 @@ func ResolveOAuthRedirectURI(flagValue string, cfg *Config) string {
 			return value
 		}
 	}
-	return "http://127.0.0.1:8085/callback"
+	return "http://127.0.0.1:0/callback"
 }
 
 func atomicWriteFile(path string, data []byte, mode os.FileMode) (retErr error) {

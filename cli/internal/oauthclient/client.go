@@ -124,6 +124,31 @@ func (c *Client) Refresh(ctx context.Context, refreshToken string) (*credential.
 	return c.requestToken(ctx, form)
 }
 
+// Revoke asks the authorization server to invalidate a token per RFC 7009.
+// The endpoint intentionally returns success even when a token is already
+// unknown or revoked.
+func (c *Client) Revoke(ctx context.Context, token, tokenTypeHint string) error {
+	form := url.Values{
+		"client_id": {c.ClientID},
+		"token":     {token},
+	}
+	if tokenTypeHint != "" {
+		form.Set("token_type_hint", tokenTypeHint)
+	}
+	req, err := c.formRequest(ctx, "/oauth21/revoke", form)
+	if err != nil {
+		return err
+	}
+	body, status, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	if status < 200 || status >= 300 {
+		return decodeOAuthError(status, body)
+	}
+	return nil
+}
+
 func (c *Client) requestToken(ctx context.Context, form url.Values) (*credential.OAuthToken, error) {
 	req, err := c.formRequest(ctx, "/oauth21/token", form)
 	if err != nil {

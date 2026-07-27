@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/intsig-textin/xparse-skills/cli/cmd/tools"
+	"github.com/intsig-textin/xparse-skills/cli/internal/config"
 	"github.com/intsig-textin/xparse-skills/cli/internal/exitcode"
 )
 
@@ -18,6 +19,7 @@ var (
 	appIDFlag      string
 	secretCodeFlag string
 	baseURLFlag    string
+	profileFlag    string
 	verboseFlag    bool
 )
 
@@ -51,6 +53,12 @@ Supports: PDF, Images (png, jpg, bmp, tiff, webp), Doc(x), Ppt(x), Xls(x), HTML,
 For more information, visit https://www.textin.com`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if err := config.SetProfile(profileFlag); err != nil {
+			return usageErr(err.Error(), "[fix] use --profile workbuddy or omit --profile")
+		}
+		return nil
+	},
 }
 
 // boolStringFlags lists flags registered as StringVar with NoOptDefVal.
@@ -164,6 +172,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&appIDFlag, "app-id", "", "Textin App ID (overrides env and config)")
 	rootCmd.PersistentFlags().StringVar(&secretCodeFlag, "secret-code", "", "Textin Secret Code (overrides env and config)")
 	rootCmd.PersistentFlags().StringVar(&baseURLFlag, "base-url", "", "API base URL (for private deployments)")
+	rootCmd.PersistentFlags().StringVar(&profileFlag, "profile", "", "Credential profile: workbuddy")
 	rootCmd.PersistentFlags().BoolVar(&verboseFlag, "verbose", false, "Verbose mode, print HTTP details")
 
 	// Register document tool primitives

@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -41,18 +42,56 @@ func ParseOpenPolicy(value string) (OpenPolicy, error) {
 // OpenURL opens a URL using the platform browser.
 type OpenURL func(string) error
 
+// ErrBrowserOpen identifies a local browser launch failure.
+var ErrBrowserOpen = errors.New("browser open failed")
+
+// BrowserAvailable reports whether the current process appears to have a local
+// graphical browser session. It intentionally treats SSH and CI as headless.
+func BrowserAvailable() (bool, string) {
+	if os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_TTY") != "" {
+		return false, "SSH session"
+	}
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("CI"))) {
+	case "1", "true", "yes":
+		return false, "CI environment"
+	}
+	if runtime.GOOS == "linux" &&
+		os.Getenv("DISPLAY") == "" &&
+		os.Getenv("WAYLAND_DISPLAY") == "" {
+		return false, "Linux display is unavailable"
+	}
+	var command string
+	switch runtime.GOOS {
+	case "darwin":
+		command = "open"
+	case "windows":
+		command = "rundll32"
+	default:
+		command = "xdg-open"
+	}
+	if _, err := exec.LookPath(command); err != nil {
+		return false, command + " is unavailable"
+	}
+	return true, ""
+}
+
 // SystemOpenURL opens a URL with the platform default application.
 func SystemOpenURL(target string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	var command *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		command = exec.Command("open", target)
+		command = exec.CommandContext(ctx, "open", target)
 	case "windows":
-		command = exec.Command("rundll32", "url.dll,FileProtocolHandler", target)
+		command = exec.CommandContext(ctx, "rundll32", "url.dll,FileProtocolHandler", target)
 	default:
-		command = exec.Command("xdg-open", target)
+		command = exec.CommandContext(ctx, "xdg-open", target)
 	}
-	return command.Start()
+	if err := command.Run(); err != nil {
+		return fmt.Errorf("%w: %v", ErrBrowserOpen, err)
+	}
+	return nil
 }
 
 // ApplyOpenPolicy attempts to open once. Auto reports the error to the caller
@@ -66,7 +105,10 @@ func ApplyOpenPolicy(target string, policy OpenPolicy, opener OpenURL) (opened b
 	}
 	if err := opener(target); err != nil {
 		if policy == OpenAlways {
-			return false, fmt.Errorf("open browser: %w", err)
+			if errors.Is(err, ErrBrowserOpen) {
+				return false, err
+			}
+			return false, fmt.Errorf("%w: %v", ErrBrowserOpen, err)
 		}
 		return false, nil
 	}
@@ -80,6 +122,7 @@ type BrowserOptions struct {
 	Policy      OpenPolicy
 	Opener      OpenURL
 	Timeout     time.Duration
+	Prompt      string
 	OnURL       func(string)
 }
 
@@ -130,6 +173,9 @@ func AuthorizeBrowser(ctx context.Context, options BrowserOptions) (*credential.
 	query.Set("state", state)
 	query.Set("code_challenge", challenge)
 	query.Set("code_challenge_method", "S256")
+	if options.Prompt != "" {
+		query.Set("prompt", options.Prompt)
+	}
 	authorizeURL.RawQuery = query.Encode()
 
 	type callbackResult struct {

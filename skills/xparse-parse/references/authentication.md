@@ -1,23 +1,32 @@
 # Authentication
 
 `xparse-cli` supports three explicit authentication paths while preserving the
-legacy AppKey workflow.
+legacy AppKey workflow. In an interactive terminal, bare `xparse-cli auth`
+opens a menu for OAuth, AppKey, status, and logout. With piped/non-terminal
+input it keeps the legacy AppKey prompt contract.
 
 ## WorkBuddy
 
 WorkBuddy v5 uses the Connector's native Device Code Flow:
 
 ```bash
-xparse-cli auth device --open-browser=never --output=jsonl
+xparse-cli --profile workbuddy auth device --open-browser=always --output=jsonl
 ```
 
-WorkBuddy extracts `verification_uri_complete` and `user_code`, presents its
-Device Code Modal, opens the verification page, and leaves the CLI process
-running while the CLI polls the token endpoint. The CLI saves credentials only
-after authorization succeeds.
+The CLI opens `verification_uri_complete` automatically when a desktop browser
+is available. WorkBuddy also extracts `verification_uri_complete` and
+`user_code`, presents its Device Code Modal as a fallback, and leaves the CLI
+process running while the CLI polls the token endpoint. The CLI saves
+credentials only after authorization succeeds.
 
-Use an isolated `XPARSE_CONFIG_DIR` for the Connector. Login and logout in
-WorkBuddy must not affect standalone credentials under `~/.xparse-cli`.
+The `workbuddy` profile stores credentials under
+`~/.xparse-cli/profiles/workbuddy/`. Login and logout in WorkBuddy therefore do
+not affect standalone credentials directly under `~/.xparse-cli`.
+
+WorkBuddy task shells do not inherit Connector lifecycle environment variables.
+Every CLI command issued by the installed Skill must therefore include
+`--profile workbuddy`. This profile also marks API requests with
+`X-From: workbuddy`.
 
 The Skill must not:
 
@@ -25,21 +34,25 @@ The Skill must not:
   private `device_code`;
 - implement its own callback listener, token polling, or HTTP client;
 - start browser PKCE as an automatic fallback from Device OAuth;
-- open a second browser when WorkBuddy already controls the Device modal.
+- open a separate browser PKCE flow while Device OAuth is in progress.
 
 If Connector status is disconnected, ask the user to reconnect it in
 WorkBuddy. Do not collect AppKey credentials in the conversation.
 
 ## Standalone Device OAuth
 
-Use this in terminals and on servers without a callback listener:
+Use this in terminals and on servers without a callback listener. Inside the
+interactive TTY auth menu, choosing OAuth selects Device OAuth for SSH or a
+Linux session without `DISPLAY`/`WAYLAND_DISPLAY`. Non-TTY and CI automation
+must call the explicit Device command; bare `auth` intentionally remains the
+legacy AppKey input flow:
 
 ```bash
 # Print URL/code and do not try to open a browser
-xparse-cli auth device --client-id <PUBLIC_CLIENT_ID> --open-browser=never
+xparse-cli auth device --open-browser=never
 
 # Open verification_uri_complete when a desktop browser is available
-xparse-cli auth device --client-id <PUBLIC_CLIENT_ID> --open-browser=auto
+xparse-cli auth device --open-browser=auto
 ```
 
 `auto` and `never` run the same Device flow. Automatic browser opening is only a
@@ -60,25 +73,34 @@ Scope resolution is flag, `XPARSE_OAUTH_SCOPE`, YAML, then `ocr:*`.
 
 ## Standalone Browser PKCE
 
-Use browser PKCE only as an explicit desktop choice:
+Bare `xparse-cli auth` automatically chooses browser PKCE when a local GUI and
+platform opener are available. Explicit commands always override detection:
 
 ```bash
-xparse-cli auth browser --client-id <PUBLIC_CLIENT_ID>
+xparse-cli auth browser
+xparse-cli auth browser --prompt=consent
 ```
 
 It opens Authorization Code + PKCE and listens only on the configured
-`http://127.0.0.1` loopback callback. It is not an implicit fallback from
-Device OAuth.
+`http://127.0.0.1` loopback callback. The default redirect uses port `0`, so
+the operating system chooses an available ephemeral port; an explicitly
+configured fixed port is still honored. `--prompt=consent` forces a fresh
+authorization confirmation instead of reusing remembered consent.
+
+Explicit `auth browser` fails fast in SSH/CI/headless mode and recommends
+Device OAuth. `--open-browser=never` remains available for advanced explicit
+port-forwarding setups.
 
 ## Standalone AppKey
 
-The legacy command remains compatible:
+The explicit legacy command remains compatible:
 
 ```bash
-xparse-cli auth
-# Equivalent explicit command:
 xparse-cli auth app-key
 ```
+
+Bare `xparse-cli auth` only keeps the direct AppKey behavior for non-terminal
+input; in a terminal it opens the authentication menu.
 
 For automation, callers may provide a complete pair through
 `XPARSE_APP_ID` and `XPARSE_SECRET_CODE`. Never print or copy the Secret into
@@ -95,4 +117,13 @@ xparse-cli auth logout --method all
 
 Status is local and does not make a network request. An expired access token
 with a still-usable refresh token remains logged in; the next paid OAuth parse
-refreshes it.
+refreshes it. Logout attempts RFC 7009 remote revocation first (Refresh Token
+preferred) and then removes the local token. A remote failure is a stderr
+warning and does not prevent local logout. Logout does not delete remembered
+consent; use the next browser login with `--prompt=consent` when a fresh
+confirmation is required.
+
+When both AppKey and OAuth exist, old configuration files remain AppKey-first.
+An explicit successful login records that method as the default, and
+`--auth-method` temporarily overrides it. With no usable credentials, parsing
+continues through the free endpoint. `--api free` always forces the free path.

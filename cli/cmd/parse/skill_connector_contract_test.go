@@ -59,9 +59,19 @@ func TestWorkBuddyConnectorCommandAndExtractionContract(t *testing.T) {
 			t.Fatalf("platform %q has an incomplete command contract", platform)
 		}
 		if !strings.Contains(contract.Auth[platform],
-			"auth device --open-browser=never --output=jsonl") {
+			"auth device --open-browser=always --output=jsonl") {
 			t.Fatalf("platform %q auth command is not native Device Flow: %q",
 				platform, contract.Auth[platform])
+		}
+		for _, command := range []string{
+			contract.Auth[platform],
+			contract.UnAuth[platform],
+			contract.Status[platform],
+		} {
+			if !strings.Contains(command, "--profile workbuddy") {
+				t.Fatalf("platform %q lifecycle command does not use the WorkBuddy profile: %q",
+					platform, command)
+			}
 		}
 	}
 	for _, command := range []string{
@@ -77,11 +87,12 @@ func TestWorkBuddyConnectorCommandAndExtractionContract(t *testing.T) {
 	if contract.AuthURLDomain != "api.textin.com" {
 		t.Fatalf("authUrlDomain = %q", contract.AuthURLDomain)
 	}
-	if contract.Env["XPARSE_CONFIG_DIR"] == "" {
-		t.Fatal("Connector does not isolate XPARSE_CONFIG_DIR")
-	}
 	if contract.Env["XPARSE_OAUTH_CLIENT_ID"] != "cli_textin_xparse" {
 		t.Fatalf("Connector public client ID = %q", contract.Env["XPARSE_OAUTH_CLIENT_ID"])
+	}
+	if contract.Env["XPARSE_CONFIG_DIR"] != "" ||
+		contract.Env["XPARSE_CLIENT_FROM"] != "" {
+		t.Fatalf("Connector lifecycle must not rely on task env propagation: %#v", contract.Env)
 	}
 	if contract.StatusMatchJSON["logged_in"] != "true" ||
 		contract.StatusMatchJSON["method"] != "oauth" {
@@ -127,21 +138,54 @@ func TestWorkBuddyConnectorCommandAndExtractionContract(t *testing.T) {
 		}
 	}
 
-	event := `{"type":"device_authorization","verification_uri":"https://api.textin.com/oauth21/device","verification_uri_complete":"https://api.textin.com/oauth21/device?user_code=ABCDE-FGHJK","user_code":"ABCDE-FGHJK","expires_in":240,"interval":5}`
+	event := `{"type":"device_authorization","verification_uri":"https://api.textin.com/oauth21/device","verification_uri_complete":"https://api.textin.com/oauth21/device?user_code=ABCD-EFGH","user_code":"ABCD-EFGH","expires_in":240,"interval":5}`
 	uriMatch := regexp.MustCompile(contract.AuthDeviceFlow.URIPattern).
 		FindStringSubmatch(event)
-	codeMatch := regexp.MustCompile(contract.AuthDeviceFlow.CodePattern).
-		FindStringSubmatch(event)
 	if len(uriMatch) != 2 ||
-		uriMatch[1] != "https://api.textin.com/oauth21/device?user_code=ABCDE-FGHJK" {
+		uriMatch[1] != "https://api.textin.com/oauth21/device?user_code=ABCD-EFGH" {
 		t.Fatalf("uri match = %#v", uriMatch)
 	}
-	if len(codeMatch) != 2 || codeMatch[1] != "ABCDE-FGHJK" {
+	codeMatch := regexp.MustCompile(contract.AuthDeviceFlow.CodePattern).
+		FindStringSubmatch(event)
+	if len(codeMatch) != 2 || codeMatch[1] != "ABCD-EFGH" {
 		t.Fatalf("code match = %#v", codeMatch)
 	}
 	if contract.AuthDeviceFlow.DefaultExpiresInSeconds != 240 ||
 		!contract.AuthDeviceFlow.CodeEmbeddedInURI {
 		t.Fatalf("authDeviceFlow = %#v", contract.AuthDeviceFlow)
+	}
+}
+
+func TestWorkBuddyTestConnectorIsPinnedAndSandboxOnly(t *testing.T) {
+	data := readRepositoryFile(t, "connector", "cli.test.json")
+	var contract connectorCLIContract
+	if err := json.Unmarshal(data, &contract); err != nil {
+		t.Fatal(err)
+	}
+	for _, platform := range []string{"darwin", "linux", "win32"} {
+		initCommand := contract.Init[platform]
+		if !strings.Contains(initCommand, "/v2.1.0-workbuddy-test.1/") ||
+			!strings.Contains(initCommand, "textin-sandbox.intsig.com") ||
+			!strings.Contains(initCommand, "--profile workbuddy config set base_url") {
+			t.Fatalf("platform %q test init is not pinned to the sandbox profile: %q",
+				platform, initCommand)
+		}
+		if strings.Contains(initCommand, "/latest/") {
+			t.Fatalf("platform %q test init uses the rolling release directory: %q",
+				platform, initCommand)
+		}
+	}
+	if contract.AuthURLDomain != "textin-sandbox.intsig.com" {
+		t.Fatalf("test authUrlDomain = %q", contract.AuthURLDomain)
+	}
+
+	publishScript := string(readRepositoryFile(t, "cli", "publish-version.sh"))
+	if !strings.Contains(publishScript, `BASE_PATH="xparse-cli/${VERSION}"`) {
+		t.Fatal("isolated publisher does not target the requested version directory")
+	}
+	if strings.Contains(publishScript, `"${BASE_PATH}/latest/`) ||
+		strings.Contains(publishScript, `"xparse-cli/latest/`) {
+		t.Fatal("isolated publisher contains a rolling release upload destination")
 	}
 }
 
@@ -189,6 +233,17 @@ func TestSkillUsesFormalCLIWithoutCredentialCollection(t *testing.T) {
 	if !strings.Contains(skill, "xparse-cli parse") ||
 		!strings.Contains(skill, "references/authentication.md") {
 		t.Fatal("Skill does not route parsing and authentication to the formal CLI")
+	}
+	if !strings.Contains(skill, "xparse-cli --profile workbuddy parse") {
+		t.Fatal("WorkBuddy Skill does not select the isolated WorkBuddy profile")
+	}
+	if !strings.Contains(skill, "xparse-cli --profile workbuddy parse <INPUT> --api free") ||
+		!strings.Contains(skill, "Use `--api paid` only when the user explicitly asks") {
+		t.Fatal("WorkBuddy Skill does not default parsing to the free API")
+	}
+	docTools := string(readRepositoryFile(t, "skills", "xparse-doc-tools", "SKILL.md"))
+	if !strings.Contains(docTools, "xparse-cli --profile workbuddy") {
+		t.Fatal("WorkBuddy document tools do not select the isolated WorkBuddy profile")
 	}
 	for _, forbidden := range []string{
 		"curl -H \"Authorization:",

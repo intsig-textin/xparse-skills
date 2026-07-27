@@ -24,16 +24,18 @@ type parseAuthSelection struct {
 }
 
 func selectParseAuthentication(cmd *cobra.Command, apiMode APIMode, methodFlag string, appKey *config.CredentialSource, cfg *config.Config) (parseAuthSelection, error) {
+	if apiMode == APIModeFree {
+		if normalizeAuthMethod(methodFlag) != "" {
+			return parseAuthSelection{}, usageErr("--api free cannot be combined with --auth-method",
+				"[fix] remove --auth-method or use --api paid")
+		}
+		// A stored or environment default must never make an explicitly free
+		// request paid.
+		return parseAuthSelection{IsFree: true}, nil
+	}
 	method, source, err := configuredAuthMethod(methodFlag, cfg)
 	if err != nil {
 		return parseAuthSelection{}, err
-	}
-	if apiMode == APIModeFree {
-		if method != "" {
-			return parseAuthSelection{}, usageErr("--api free cannot be combined with an authentication method",
-				"[fix] remove --auth-method/XPARSE_AUTH_METHOD/default_auth_method or use --api paid")
-		}
-		return parseAuthSelection{IsFree: true}, nil
 	}
 	if method == authMethodOAuth && explicitAppKeyFlags(cmd) {
 		return parseAuthSelection{}, usageErr("--auth-method oauth cannot be combined with --app-id or --secret-code",
