@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/intsig-textin/xparse-skills/cli/cmd/tools"
 	"github.com/intsig-textin/xparse-skills/cli/internal/exitcode"
 )
 
@@ -164,4 +165,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&secretCodeFlag, "secret-code", "", "Textin Secret Code (overrides env and config)")
 	rootCmd.PersistentFlags().StringVar(&baseURLFlag, "base-url", "", "API base URL (for private deployments)")
 	rootCmd.PersistentFlags().BoolVar(&verboseFlag, "verbose", false, "Verbose mode, print HTTP details")
+
+	// Register document tool primitives
+	tools.RegisterCommands(rootCmd)
 }

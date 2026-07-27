@@ -14,7 +14,7 @@ fi
 VERSION="$1"
 GO_BIN="${GO_BIN:-/usr/bin/go}"
 
-PKG="github.com/intsig-textin/xparse-skills/cli/cmd"
+PKG="github.com/intsig-textin/xparse-skills/cli/cmd/parse"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLI_DIR="${SCRIPT_DIR}"
 DIST_DIR="${SCRIPT_DIR}/dist"
