@@ -27,15 +27,17 @@ var (
 	authBrowserScope       string
 	authBrowserRedirectURI string
 	authBrowserOpenBrowser string
+	authBrowserPrompt      string
 	authBrowserTimeout     time.Duration
 
 	authStatusOutput string
 	authLogoutMethod string
 	authAppKeyShow   bool
 
-	oauthHTTPClient = &http.Client{Timeout: 30 * time.Second}
-	oauthOpenURL    = oauthclient.SystemOpenURL
-	oauthNow        = time.Now
+	oauthHTTPClient       = &http.Client{Timeout: 30 * time.Second}
+	oauthOpenURL          = oauthclient.SystemOpenURL
+	oauthBrowserAvailable = oauthclient.BrowserAvailable
+	oauthNow              = time.Now
 )
 
 var authAppKeyCmd = &cobra.Command{
@@ -46,7 +48,7 @@ var authAppKeyCmd = &cobra.Command{
 		if authAppKeyShow {
 			return runAuthShow()
 		}
-		return runAuthSetup()
+		return runAuthSetupIO(cmd.InOrStdin(), cmd.OutOrStdout())
 	},
 }
 
@@ -91,6 +93,7 @@ func init() {
 	authBrowserCmd.Flags().StringVar(&authBrowserScope, "scope", "", "OAuth scope (default: ocr:*)")
 	authBrowserCmd.Flags().StringVar(&authBrowserRedirectURI, "redirect-uri", "", "OAuth loopback redirect URI")
 	authBrowserCmd.Flags().StringVar(&authBrowserOpenBrowser, "open-browser", "auto", "Browser policy: auto, always, never")
+	authBrowserCmd.Flags().StringVar(&authBrowserPrompt, "prompt", "", "Authorization prompt: consent")
 	authBrowserCmd.Flags().DurationVar(&authBrowserTimeout, "timeout", 5*time.Minute, "Maximum time to wait for the browser callback")
 
 	authStatusCmd.Flags().StringVar(&authStatusOutput, "output", "text", "Output format: text, json")
@@ -104,6 +107,11 @@ func runAuthDevice(cmd *cobra.Command, args []string) error {
 	policy, err := oauthclient.ParseOpenPolicy(authDeviceOpenBrowser)
 	if err != nil {
 		return usageErr(err.Error(), "[fix] use --open-browser auto, always, or never")
+	}
+	if policy == oauthclient.OpenAuto {
+		if available, _ := oauthBrowserAvailable(); !available {
+			policy = oauthclient.OpenNever
+		}
 	}
 	client, _, err := resolvedOAuthClient(cmd, authDeviceClientID, authDeviceScope)
 	if err != nil {
@@ -180,6 +188,9 @@ func runAuthDevice(cmd *cobra.Command, args []string) error {
 	if err := store.Save(token); err != nil {
 		return deviceAuthFailure(cmd, authDeviceOutput, "credential_store_error", err)
 	}
+	if err := config.SetDefaultAuthMethod(string(authMethodOAuth)); err != nil {
+		return deviceAuthFailure(cmd, authDeviceOutput, "credential_store_error", err)
+	}
 	if authDeviceOutput == "jsonl" {
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(struct {
 			Type   string `json:"type"`
@@ -196,6 +207,17 @@ func runAuthBrowser(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return usageErr(err.Error(), "[fix] use --open-browser auto, always, or never")
 	}
+	prompt := strings.TrimSpace(authBrowserPrompt)
+	if prompt != "" && prompt != "consent" {
+		return usageErr("invalid --prompt value, only consent is supported",
+			"[fix] use --prompt consent or omit --prompt")
+	}
+	if policy == oauthclient.OpenAuto {
+		if available, reason := oauthBrowserAvailable(); !available {
+			return usageErr("local browser OAuth is unavailable: "+reason,
+				"[fix] use xparse-cli auth device, or use --open-browser never with explicit port forwarding")
+		}
+	}
 	client, cfg, err := resolvedOAuthClient(cmd, authBrowserClientID, authBrowserScope)
 	if err != nil {
 		return err
@@ -207,6 +229,7 @@ func runAuthBrowser(cmd *cobra.Command, args []string) error {
 		Policy:      policy,
 		Opener:      oauthOpenURL,
 		Timeout:     authBrowserTimeout,
+		Prompt:      prompt,
 		OnURL: func(target string) {
 			fmt.Fprintf(cmd.OutOrStdout(), "Open: %s\n", target)
 		},
@@ -221,6 +244,9 @@ func runAuthBrowser(cmd *cobra.Command, args []string) error {
 	if err := store.Save(token); err != nil {
 		return generalErr("failed to save OAuth credential", "")
 	}
+	if err := config.SetDefaultAuthMethod(string(authMethodOAuth)); err != nil {
+		return generalErr("failed to save default authentication method", "")
+	}
 	fmt.Fprintln(cmd.OutOrStdout(), "Logged in")
 	return nil
 }
@@ -229,20 +255,19 @@ func runAuthStatus(cmd *cobra.Command, args []string) error {
 	if authStatusOutput != "text" && authStatusOutput != "json" {
 		return usageErr("invalid --output value, must be text or json", "[fix] use --output text or --output json")
 	}
-	loggedIn := false
-	method := ""
-	store, storeErr := credential.DefaultStore()
-	if storeErr == nil {
-		if token, err := store.Load(); err == nil && token.LoggedIn(oauthNow()) {
-			loggedIn = true
-			method = "oauth"
-		}
+	cfg, err := config.Load()
+	if err != nil {
+		return generalErr("failed to load authentication configuration", "")
 	}
-	if !loggedIn {
-		if appKey, err := config.ResolveCredentials(cmd); err == nil && appKey.AppID != "" && appKey.SecretCode != "" {
-			loggedIn = true
-			method = "app-key"
-		}
+	appKey, err := config.ResolveCredentials(cmd)
+	if err != nil {
+		return generalErr("failed to resolve AppKey configuration", "")
+	}
+	selection, selectionErr := selectParseAuthentication(cmd, APIModeAuto, "", appKey, cfg)
+	loggedIn := selectionErr == nil && !selection.IsFree
+	method := ""
+	if loggedIn {
+		method = string(selection.Method)
 	}
 	if authStatusOutput == "json" {
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(struct {
@@ -264,28 +289,98 @@ func runAuthLogout(cmd *cobra.Command, args []string) error {
 	default:
 		return usageErr("--method is required and must be oauth, app-key, or all", "[fix] use auth logout --method oauth|app-key|all")
 	}
+	cfg, err := config.Load()
+	configUnavailable := err != nil
+	if err != nil {
+		if authLogoutMethod == "app-key" {
+			return generalErr("failed to load authentication configuration", "")
+		}
+		// OAuth/all logout must still be able to remove a local token when a
+		// malformed YAML file prevents loading non-secret preferences.
+		cfg = &config.Config{}
+	}
 	if authLogoutMethod == "oauth" || authLogoutMethod == "all" {
 		store, err := credential.DefaultStore()
 		if err != nil {
 			return generalErr("failed to locate OAuth credential store", "")
+		}
+		if token, loadErr := store.Load(); loadErr == nil {
+			rawToken, hint := token.RefreshToken, "refresh_token"
+			if rawToken == "" {
+				rawToken, hint = token.AccessToken, "access_token"
+			}
+			clientID := strings.TrimSpace(token.ClientID)
+			if clientID == "" {
+				clientID = config.ResolveOAuthClientID("", cfg)
+			}
+			if rawToken != "" && clientID != "" {
+				revokeCtx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
+				client := &oauthclient.Client{
+					BaseURL:    config.GetBaseURL(cmd, cfg),
+					ClientID:   clientID,
+					HTTPClient: oauthHTTPClient,
+					Now:        oauthNow,
+				}
+				revokeErr := client.Revoke(revokeCtx, rawToken, hint)
+				cancel()
+				if revokeErr != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(),
+						"Warning: remote OAuth revocation failed (%s); local credentials were still removed.\n",
+						safeOAuthErrorCode(revokeErr))
+				}
+			}
 		}
 		if err := store.Remove(); err != nil {
 			return generalErr("failed to remove OAuth credential", "")
 		}
 	}
 	if authLogoutMethod == "app-key" || authLogoutMethod == "all" {
-		cfg, err := config.Load()
-		if err != nil {
-			return generalErr("failed to load AppKey configuration", "")
-		}
 		cfg.AppID = ""
 		cfg.SecretCode = ""
-		if err := config.Save(cfg); err != nil {
-			return generalErr("failed to remove AppKey credential", "")
+	}
+	if configUnavailable {
+		if authLogoutMethod == "all" {
+			if err := config.Save(&config.Config{}); err != nil {
+				return generalErr("failed to reset malformed authentication configuration", "")
+			}
+			fmt.Fprintln(cmd.ErrOrStderr(),
+				"Warning: malformed authentication preferences were reset during logout all.")
+		} else {
+			fmt.Fprintln(cmd.ErrOrStderr(),
+				"Warning: authentication preferences could not be read; the local OAuth token was still removed.")
 		}
+		fmt.Fprintln(cmd.OutOrStdout(), "Logged out")
+		return nil
+	}
+	reconcileDefaultAuthMethod(cfg)
+	if err := config.Save(cfg); err != nil {
+		return generalErr("failed to update authentication configuration", "")
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "Logged out")
 	return nil
+}
+
+func reconcileDefaultAuthMethod(cfg *config.Config) {
+	hasAppKey := strings.TrimSpace(cfg.AppID) != "" && strings.TrimSpace(cfg.SecretCode) != ""
+	hasOAuth := hasOAuthSession(oauthNow())
+	switch normalizeAuthMethod(cfg.DefaultAuthMethod) {
+	case string(authMethodOAuth):
+		if !hasOAuth {
+			if hasAppKey {
+				cfg.DefaultAuthMethod = string(authMethodAppKey)
+			} else {
+				cfg.DefaultAuthMethod = ""
+			}
+		}
+	case string(authMethodAppKey):
+		if !hasAppKey {
+			if hasOAuth {
+				cfg.DefaultAuthMethod = string(authMethodOAuth)
+			} else {
+				cfg.DefaultAuthMethod = ""
+			}
+		}
+	}
 }
 
 func resolvedOAuthClient(cmd *cobra.Command, clientIDFlag, scopeFlag string) (*oauthclient.Client, *config.Config, error) {
@@ -323,7 +418,7 @@ func deviceAuthFailure(cmd *cobra.Command, output, code string, cause error) err
 func oauthCommandError(cmd *cobra.Command, prefix string, err error) error {
 	code := safeOAuthErrorCode(err)
 	fmt.Fprintf(cmd.ErrOrStderr(), "%s: %s\n", prefix, code)
-	return &exitError{code: exitcode.GeneralError, msg: code}
+	return &exitError{code: exitcode.GeneralError, msg: code, cause: err}
 }
 
 func safeOAuthErrorCode(err error) string {

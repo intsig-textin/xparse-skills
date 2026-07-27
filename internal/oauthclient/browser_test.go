@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -27,10 +28,31 @@ func TestApplyOpenPolicy(t *testing.T) {
 	}
 	if opened, err := ApplyOpenPolicy("https://example", OpenAlways, opener); err == nil || opened || calls != 2 {
 		t.Fatalf("always = opened %v, err %v, calls %d", opened, err, calls)
+	} else if !errors.Is(err, ErrBrowserOpen) {
+		t.Fatalf("always error = %v, want ErrBrowserOpen", err)
+	}
+}
+
+func TestBrowserAvailableTreatsSSHAndCIAsHeadless(t *testing.T) {
+	t.Setenv("SSH_CONNECTION", "client server")
+	t.Setenv("SSH_TTY", "")
+	t.Setenv("CI", "")
+	if available, reason := BrowserAvailable(); available || !strings.Contains(reason, "SSH") {
+		t.Fatalf("SSH available=%v reason=%q", available, reason)
+	}
+
+	t.Setenv("SSH_CONNECTION", "")
+	t.Setenv("CI", "true")
+	if available, reason := BrowserAvailable(); available || !strings.Contains(reason, "CI") {
+		t.Fatalf("CI available=%v reason=%q", available, reason)
 	}
 }
 
 func TestAuthorizeBrowserPKCELoopback(t *testing.T) {
+	occupied8085, err := net.Listen("tcp", "127.0.0.1:8085")
+	if err == nil {
+		defer occupied8085.Close()
+	}
 	var mu sync.Mutex
 	var expectedChallenge string
 	var tokenRequests int
@@ -69,7 +91,8 @@ func TestAuthorizeBrowserPKCELoopback(t *testing.T) {
 			return err
 		}
 		query := authorizeURL.Query()
-		if query.Get("code_challenge_method") != "S256" || query.Get("state") == "" {
+		if query.Get("code_challenge_method") != "S256" || query.Get("state") == "" ||
+			query.Get("prompt") != "consent" {
 			return errors.New("missing PKCE/state")
 		}
 		mu.Lock()
@@ -78,6 +101,9 @@ func TestAuthorizeBrowserPKCELoopback(t *testing.T) {
 		callback, err := url.Parse(query.Get("redirect_uri"))
 		if err != nil {
 			return err
+		}
+		if callback.Port() == "" || callback.Port() == "0" {
+			return errors.New("dynamic loopback port was not resolved")
 		}
 		callbackQuery := callback.Query()
 		callbackQuery.Set("code", "authorization-code")
@@ -103,6 +129,7 @@ func TestAuthorizeBrowserPKCELoopback(t *testing.T) {
 		Policy:      OpenAlways,
 		Opener:      opener,
 		Timeout:     2 * time.Second,
+		Prompt:      "consent",
 	})
 	if err != nil {
 		t.Fatal(err)

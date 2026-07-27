@@ -584,6 +584,24 @@ func TestOAuthRefreshFailureNeverFallsBackToAppKey(t *testing.T) {
 func TestAuthStatusAndLogoutKeepCredentialStoresIndependent(t *testing.T) {
 	home := t.TempDir()
 	configDir := filepath.Join(home, "isolated")
+	var revokeMu sync.Mutex
+	var revokedToken, revokedHint, revokedClientID string
+	revokeServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/oauth21/revoke" {
+			http.NotFound(writer, request)
+			return
+		}
+		if err := request.ParseForm(); err != nil {
+			t.Fatal(err)
+		}
+		revokeMu.Lock()
+		revokedToken = request.Form.Get("token")
+		revokedHint = request.Form.Get("token_type_hint")
+		revokedClientID = request.Form.Get("client_id")
+		revokeMu.Unlock()
+		writeJSON(t, writer, map[string]any{})
+	}))
+	defer revokeServer.Close()
 	t.Setenv("XPARSE_CONFIG_DIR", configDir)
 	if err := config.Save(&config.Config{
 		AppID: "app-id", SecretCode: "secret-code",
@@ -603,11 +621,12 @@ func TestAuthStatusAndLogoutKeepCredentialStoresIndependent(t *testing.T) {
 	}
 	environment := map[string]string{
 		"XPARSE_CONFIG_DIR":  configDir,
+		"XPARSE_BASE_URL":    revokeServer.URL,
 		"XPARSE_APP_ID":      "",
 		"XPARSE_SECRET_CODE": "",
 	}
 	status := runCLIHelperEnv(t, home, "auth status --output json", "", environment)
-	if status.err != nil || strings.TrimSpace(status.stdout) != `{"logged_in":true,"method":"oauth"}` {
+	if status.err != nil || strings.TrimSpace(status.stdout) != `{"logged_in":true,"method":"app-key"}` {
 		t.Fatalf("status = stdout %q stderr %q err %v", status.stdout, status.stderr, status.err)
 	}
 
@@ -632,6 +651,14 @@ func TestAuthStatusAndLogoutKeepCredentialStoresIndependent(t *testing.T) {
 	}
 	if _, err := os.Stat(store.Path); !os.IsNotExist(err) {
 		t.Fatalf("OAuth logout did not remove token: %v", err)
+	}
+	revokeMu.Lock()
+	gotRevokedToken, gotRevokedHint, gotRevokedClientID := revokedToken, revokedHint, revokedClientID
+	revokeMu.Unlock()
+	if gotRevokedToken != "valid-refresh" || gotRevokedHint != "refresh_token" ||
+		gotRevokedClientID != "flag-client" {
+		t.Fatalf("revoke token=%q hint=%q client=%q",
+			gotRevokedToken, gotRevokedHint, gotRevokedClientID)
 	}
 	cfg, err = config.Load()
 	if err != nil {

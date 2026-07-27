@@ -24,6 +24,10 @@ const (
 
 	FreeAPIBaseURL   = "https://api.textin.com"
 	FreeParseAPIPath = "/api/v1/agent/parse/sync"
+
+	clientFromEnv       = "XPARSE_CLIENT_FROM"
+	clientFromCLI       = "cli"
+	clientFromWorkBuddy = "workbuddy"
 )
 
 // APIMode represents free vs paid API selection.
@@ -239,7 +243,10 @@ func NewClientWithBearer(cmd *cobra.Command, cred *config.CredentialSource, bear
 	if isFree {
 		baseURL = FreeAPIBaseURL
 		parsePath = FreeParseAPIPath
-		if (cmd != nil && cmd.Flags().Changed("base-url")) || strings.TrimSpace(os.Getenv("XPARSE_BASE_URL")) != "" {
+		if (cmd != nil && cmd.Flags().Changed("base-url")) ||
+			strings.TrimSpace(os.Getenv("XPARSE_BASE_URL")) != "" ||
+			(config.Profile() == config.ProfileWorkBuddy &&
+				cfg != nil && strings.TrimSpace(cfg.BaseURL) != "") {
 			baseURL = config.GetBaseURL(cmd, cfg)
 		}
 	} else {
@@ -328,7 +335,7 @@ func (c *Client) ParseURL(fileURL string, opts *ParseOptions) (*ParseResponse, e
 }
 
 func (c *Client) setAuthHeaders(req *http.Request) {
-	req.Header.Set("X-From", "cli")
+	req.Header.Set("X-From", resolveClientFrom(os.Getenv(clientFromEnv)))
 	if c.IsFreeAPI {
 		return
 	}
@@ -339,6 +346,18 @@ func (c *Client) setAuthHeaders(req *http.Request) {
 	if c.AppID != "" && c.SecretCode != "" {
 		req.Header.Set("x-ti-app-id", c.AppID)
 		req.Header.Set("x-ti-secret-code", c.SecretCode)
+	}
+}
+
+func resolveClientFrom(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case clientFromWorkBuddy:
+		return clientFromWorkBuddy
+	default:
+		if config.Profile() == config.ProfileWorkBuddy {
+			return clientFromWorkBuddy
+		}
+		return clientFromCLI
 	}
 }
 

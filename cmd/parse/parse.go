@@ -517,11 +517,13 @@ func generalErr(message string, suggestion string) *exitError {
 
 // exitError carries a process exit code alongside the error message.
 type exitError struct {
-	code int
-	msg  string
+	code  int
+	msg   string
+	cause error
 }
 
 func (e *exitError) Error() string { return e.msg }
+func (e *exitError) Unwrap() error { return e.cause }
 
 // ExitCode returns the process exit code for this error.
 func (e *exitError) ExitCode() int { return e.code }
