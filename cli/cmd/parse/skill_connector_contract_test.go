@@ -165,7 +165,7 @@ func TestWorkBuddyTestConnectorIsPinnedAndSandboxOnly(t *testing.T) {
 	}
 	for _, platform := range []string{"darwin", "linux", "win32"} {
 		initCommand := contract.Init[platform]
-		if !strings.Contains(initCommand, "/v2.1.0-workbuddy-test.2/") ||
+		if !strings.Contains(initCommand, "/v2.1.0-workbuddy-test.3/") ||
 			!strings.Contains(initCommand, "textin-sandbox.intsig.com") ||
 			!strings.Contains(initCommand, "--profile workbuddy config set base_url") {
 			t.Fatalf("platform %q test init is not pinned to the sandbox profile: %q",
@@ -300,7 +300,7 @@ func TestWorkBuddyMacOSTestInjectionRestoresUninstalledBaseline(t *testing.T) {
 	assertFileContains(t, filepath.Join(connectorDir, "connector-meta.json"),
 		`"source": "textin-xparse"`)
 	assertFileContains(t, filepath.Join(connectorDir, ".workbuddy-test"),
-		"v2.1.0-workbuddy-test.2")
+		"v2.1.0-workbuddy-test.3")
 	assertCatalogConnectorCount(t, catalogPath, "textin-xparse", 1)
 	assertFileContent(t, catalogPath+".textin-xparse.production.bak", productionCatalog)
 	assertFileContent(t, filepath.Join(profileDir+".production.bak", "config.yaml"),
@@ -408,7 +408,7 @@ func TestWorkBuddyWindowsSwitchScriptsMatchMacOSSafetyContract(t *testing.T) {
 		"enable-workbuddy-test.ps1",
 	))
 	for _, expected := range []string{
-		"v2.1.0-workbuddy-test.2",
+		"v2.1.0-workbuddy-test.3",
 		"cli_textin_xparse_workbuddy",
 		"textin-sandbox.intsig.com",
 		"workbuddy-cli.json",

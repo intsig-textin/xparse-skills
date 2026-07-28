@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-VERSION="${XPARSER_VERSION:-v2.1.0-workbuddy-test.2}"
+VERSION="${XPARSER_VERSION:-v2.1.0-workbuddy-test.3}"
 DOWNLOAD_BASE="${XPARSER_DOWNLOAD_BASE:-https://dllf.intsig.net/download/2026/Solution/xparse-cli}"
 MARKETPLACE_ROOT="${WORKBUDDY_MARKETPLACE_ROOT:-${HOME}/.workbuddy/connectors-marketplace}"
 CATALOG_FILE="${WORKBUDDY_CONNECTOR_CATALOG:-${MARKETPLACE_ROOT}/.codebuddy-connector/connectors.json}"
@@ -103,23 +103,36 @@ else
 
   if grep -q '"id"[[:space:]]*:[[:space:]]*"textin-xparse"' "${CATALOG_FILE}"; then
     cp "${CATALOG_FILE}" "${CATALOG_DOWNLOAD}"
+  elif command -v ruby >/dev/null 2>&1; then
+    ruby -rjson - "${CATALOG_FILE}" "${ENTRY_DOWNLOAD}" "${CATALOG_DOWNLOAD}" <<'RUBY'
+catalog_path, entry_path, output_path = ARGV
+catalog = JSON.parse(File.read(catalog_path, encoding: "UTF-8"))
+entry = JSON.parse(File.read(entry_path, encoding: "UTF-8"))
+connectors = catalog["connectors"]
+raise "connectors must be an array" unless connectors.is_a?(Array)
+connectors.unshift(entry)
+File.write(output_path, JSON.pretty_generate(catalog) + "\n", mode: "w:UTF-8")
+RUBY
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 - "${CATALOG_FILE}" "${ENTRY_DOWNLOAD}" "${CATALOG_DOWNLOAD}" <<'PYTHON'
+import json
+import sys
+
+catalog_path, entry_path, output_path = sys.argv[1:]
+with open(catalog_path, encoding="utf-8") as source:
+    catalog = json.load(source)
+with open(entry_path, encoding="utf-8") as source:
+    entry = json.load(source)
+connectors = catalog.get("connectors")
+if not isinstance(connectors, list):
+    raise ValueError("connectors must be an array")
+connectors.insert(0, entry)
+with open(output_path, "w", encoding="utf-8") as destination:
+    json.dump(catalog, destination, ensure_ascii=False, indent=2)
+    destination.write("\n")
+PYTHON
   else
-    entry_json="$(tr -d '\n' < "${ENTRY_DOWNLOAD}")"
-    awk -v entry="${entry_json}" '
-      /^[[:space:]]*"connectors"[[:space:]]*:[[:space:]]*\[/ && !inserted {
-        print
-        print "    " entry ","
-        inserted = 1
-        next
-      }
-      { print }
-      END {
-        if (!inserted) {
-          exit 42
-        }
-      }
-    ' "${CATALOG_FILE}" > "${CATALOG_DOWNLOAD}" ||
-      fail "无法向 WorkBuddy Connector 注册表加入 TextIn xParse。"
+    fail "缺少可用的 JSON 解析器；macOS 需要 ruby，Linux 需要 ruby 或 python3。"
   fi
 
   if command -v plutil >/dev/null 2>&1; then
