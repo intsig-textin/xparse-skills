@@ -194,6 +194,9 @@ func TestWorkBuddyTestConnectorIsPinnedAndSandboxOnly(t *testing.T) {
 	}
 	for _, artifact := range []string{
 		`"${BASE_PATH}/workbuddy-cli.json"`,
+		`"${BASE_PATH}/workbuddy-connector-meta.json"`,
+		`"${BASE_PATH}/workbuddy-icon.png"`,
+		`"${BASE_PATH}/workbuddy-marketplace-entry.json"`,
 		`"${BASE_PATH}/enable-workbuddy-test.sh"`,
 		`"${BASE_PATH}/restore-workbuddy-production.sh"`,
 		`"${BASE_PATH}/enable-workbuddy-test.ps1"`,
@@ -205,23 +208,57 @@ func TestWorkBuddyTestConnectorIsPinnedAndSandboxOnly(t *testing.T) {
 	}
 }
 
-func TestWorkBuddyMacOSTestSwitchPreservesProductionState(t *testing.T) {
+func TestWorkBuddyMacOSTestInjectionRestoresUninstalledBaseline(t *testing.T) {
 	tempDir := t.TempDir()
-	connectorDir := filepath.Join(tempDir, "connector")
+	marketplaceRoot := filepath.Join(tempDir, "marketplace")
+	catalogDir := filepath.Join(marketplaceRoot, ".codebuddy-connector")
+	connectorsDir := filepath.Join(marketplaceRoot, "connectors")
+	connectorDir := filepath.Join(connectorsDir, "textin-xparse")
 	profileDir := filepath.Join(tempDir, "profiles", "workbuddy")
-	if err := os.MkdirAll(connectorDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(profileDir, 0o700); err != nil {
-		t.Fatal(err)
+	cliPath := filepath.Join(tempDir, "bin", "xparse-cli")
+	assetDir := filepath.Join(tempDir, "assets")
+	testBackupRoot := filepath.Join(tempDir, "test-backups")
+	for _, dir := range []string{
+		catalogDir,
+		connectorsDir,
+		profileDir,
+		filepath.Dir(cliPath),
+		assetDir,
+	} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	productionConnector := readRepositoryFile(t, "connector", "cli.json")
-	testConnectorPath := repositoryPath(t, "connector", "cli.test.json")
-	connectorPath := filepath.Join(connectorDir, "cli.json")
-	if err := os.WriteFile(connectorPath, productionConnector, 0o600); err != nil {
+	productionCatalog := []byte(`{
+  "tokenProviders": [],
+  "connectors": [
+    {
+      "id": "existing",
+      "name": "Existing Connector"
+    }
+  ]
+}
+`)
+	catalogPath := filepath.Join(catalogDir, "connectors.json")
+	if err := os.WriteFile(catalogPath, productionCatalog, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	for remoteName, repositoryParts := range map[string][]string{
+		"workbuddy-cli.json":               {"connector", "cli.test.json"},
+		"workbuddy-connector-meta.json":    {"connector", "connector-meta.json"},
+		"workbuddy-icon.png":               {"connector", "icon.png"},
+		"workbuddy-marketplace-entry.json": {"connector", "marketplace-entry.json"},
+	} {
+		if err := os.WriteFile(
+			filepath.Join(assetDir, remoteName),
+			readRepositoryFile(t, repositoryParts...),
+			0o600,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	productionProfile := []byte("base_url: https://api.textin.com\n")
 	if err := os.WriteFile(
 		filepath.Join(profileDir, "config.yaml"),
@@ -238,24 +275,59 @@ func TestWorkBuddyMacOSTestSwitchPreservesProductionState(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+	productionCLI := []byte("production-cli")
+	if err := os.WriteFile(
+		cliPath,
+		productionCLI,
+		0o700,
+	); err != nil {
+		t.Fatal(err)
+	}
 
-	runWorkBuddyScript(t, "enable-workbuddy-test.sh", connectorDir, profileDir,
-		"XPARSE_TEST_CONNECTOR_FILE="+testConnectorPath)
-	assertFileContains(t, connectorPath, "cli_textin_xparse_workbuddy")
-	assertFileContains(t, connectorPath, "textin-sandbox.intsig.com")
-	assertFileContains(t, connectorPath+".production.bak", `"cli_textin_xparse"`)
+	runWorkBuddyScript(
+		t,
+		"enable-workbuddy-test.sh",
+		marketplaceRoot,
+		profileDir,
+		cliPath,
+		assetDir,
+		testBackupRoot,
+	)
+	assertFileContains(t, filepath.Join(connectorDir, "cli.json"),
+		"cli_textin_xparse_workbuddy")
+	assertFileContains(t, filepath.Join(connectorDir, "cli.json"),
+		"textin-sandbox.intsig.com")
+	assertFileContains(t, filepath.Join(connectorDir, "connector-meta.json"),
+		`"source": "textin-xparse"`)
+	assertFileContains(t, filepath.Join(connectorDir, ".workbuddy-test"),
+		"v2.1.0-workbuddy-test.1")
+	assertCatalogConnectorCount(t, catalogPath, "textin-xparse", 1)
+	assertFileContent(t, catalogPath+".textin-xparse.production.bak", productionCatalog)
 	assertFileContent(t, filepath.Join(profileDir+".production.bak", "config.yaml"),
 		productionProfile)
 	assertFileContent(t, filepath.Join(profileDir+".production.bak", "oauth-token.json"),
 		productionToken)
+	assertFileContent(t, cliPath+".production.bak", productionCLI)
 	if _, err := os.Stat(profileDir); !os.IsNotExist(err) {
 		t.Fatalf("test switch kept the production profile active: %v", err)
 	}
+	if _, err := os.Stat(cliPath); !os.IsNotExist(err) {
+		t.Fatalf("test switch kept the production CLI active: %v", err)
+	}
 
-	runWorkBuddyScript(t, "enable-workbuddy-test.sh", connectorDir, profileDir,
-		"XPARSE_TEST_CONNECTOR_FILE="+testConnectorPath)
+	runWorkBuddyScript(
+		t,
+		"enable-workbuddy-test.sh",
+		marketplaceRoot,
+		profileDir,
+		cliPath,
+		assetDir,
+		testBackupRoot,
+	)
 	assertFileContent(t, filepath.Join(profileDir+".production.bak", "oauth-token.json"),
 		productionToken)
+	assertFileContent(t, cliPath+".production.bak", productionCLI)
+	assertCatalogConnectorCount(t, catalogPath, "textin-xparse", 1)
 
 	if err := os.MkdirAll(profileDir, 0o700); err != nil {
 		t.Fatal(err)
@@ -268,16 +340,44 @@ func TestWorkBuddyMacOSTestSwitchPreservesProductionState(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+	testCLI := []byte("test-cli")
+	if err := os.WriteFile(cliPath, testCLI, 0o700); err != nil {
+		t.Fatal(err)
+	}
 
-	runWorkBuddyScript(t, "restore-workbuddy-production.sh", connectorDir, profileDir)
-	assertFileContains(t, connectorPath, `"cli_textin_xparse"`)
+	runWorkBuddyScript(
+		t,
+		"restore-workbuddy-production.sh",
+		marketplaceRoot,
+		profileDir,
+		cliPath,
+		assetDir,
+		testBackupRoot,
+	)
+	assertFileContent(t, catalogPath, productionCatalog)
+	assertCatalogConnectorCount(t, catalogPath, "textin-xparse", 0)
+	if _, err := os.Stat(connectorDir); !os.IsNotExist(err) {
+		t.Fatalf("restore kept an injected Connector active: %v", err)
+	}
 	assertFileContent(t, filepath.Join(profileDir, "config.yaml"), productionProfile)
 	assertFileContent(t, filepath.Join(profileDir, "oauth-token.json"), productionToken)
+	assertFileContent(t, cliPath, productionCLI)
 	testProfileBackups, err := filepath.Glob(profileDir + ".test.*.bak")
 	if err != nil || len(testProfileBackups) != 1 {
 		t.Fatalf("test profile backups = %v, err = %v", testProfileBackups, err)
 	}
 	assertFileContent(t, filepath.Join(testProfileBackups[0], "oauth-token.json"), testToken)
+	testCLIBackups, err := filepath.Glob(cliPath + ".test.*.bak")
+	if err != nil || len(testCLIBackups) != 1 {
+		t.Fatalf("test CLI backups = %v, err = %v", testCLIBackups, err)
+	}
+	assertFileContent(t, testCLIBackups[0], testCLI)
+	testConnectorBackups, err := filepath.Glob(filepath.Join(testBackupRoot, "connector.*"))
+	if err != nil || len(testConnectorBackups) != 1 {
+		t.Fatalf("test Connector backups = %v, err = %v", testConnectorBackups, err)
+	}
+	assertFileContains(t, filepath.Join(testConnectorBackups[0], "cli.json"),
+		"cli_textin_xparse_workbuddy")
 }
 
 func TestWorkBuddyWindowsSwitchScriptsMatchMacOSSafetyContract(t *testing.T) {
@@ -287,8 +387,11 @@ func TestWorkBuddyWindowsSwitchScriptsMatchMacOSSafetyContract(t *testing.T) {
 	} {
 		script := string(readRepositoryFile(t, "connector", "test", name))
 		for _, expected := range []string{
+			"WORKBUDDY_MARKETPLACE_ROOT",
+			"WORKBUDDY_CONNECTOR_CATALOG",
 			"WORKBUDDY_CONNECTOR_DIR",
 			"XPARSE_WORKBUDDY_PROFILE_DIR",
+			"XPARSE_CLI_PATH",
 			"production.bak",
 			"ConvertFrom-Json",
 			"Move-Item",
@@ -309,6 +412,9 @@ func TestWorkBuddyWindowsSwitchScriptsMatchMacOSSafetyContract(t *testing.T) {
 		"cli_textin_xparse_workbuddy",
 		"textin-sandbox.intsig.com",
 		"workbuddy-cli.json",
+		"workbuddy-connector-meta.json",
+		"workbuddy-icon.png",
+		"workbuddy-marketplace-entry.json",
 	} {
 		if !strings.Contains(enableScript, expected) {
 			t.Fatalf("Windows enable script does not contain %q", expected)
@@ -322,8 +428,7 @@ func TestWorkBuddyWindowsSwitchScriptsMatchMacOSSafetyContract(t *testing.T) {
 
 func runWorkBuddyScript(
 	t *testing.T,
-	name, connectorDir, profileDir string,
-	extraEnv ...string,
+	name, marketplaceRoot, profileDir, cliPath, assetDir, testBackupRoot string,
 ) {
 	t.Helper()
 	command := exec.Command(
@@ -332,12 +437,39 @@ func runWorkBuddyScript(
 	)
 	command.Env = append(
 		os.Environ(),
-		"WORKBUDDY_CONNECTOR_DIR="+connectorDir,
+		"WORKBUDDY_MARKETPLACE_ROOT="+marketplaceRoot,
 		"XPARSE_WORKBUDDY_PROFILE_DIR="+profileDir,
+		"XPARSE_CLI_PATH="+cliPath,
+		"XPARSE_TEST_ASSET_DIR="+assetDir,
+		"WORKBUDDY_TEST_BACKUP_ROOT="+testBackupRoot,
 	)
-	command.Env = append(command.Env, extraEnv...)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("%s failed: %v\n%s", name, err, output)
+	}
+}
+
+func assertCatalogConnectorCount(t *testing.T, path, connectorID string, want int) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var catalog struct {
+		Connectors []struct {
+			ID string `json:"id"`
+		} `json:"connectors"`
+	}
+	if err := json.Unmarshal(data, &catalog); err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+	got := 0
+	for _, connector := range catalog.Connectors {
+		if connector.ID == connectorID {
+			got++
+		}
+	}
+	if got != want {
+		t.Fatalf("%s connector %q count = %d, want %d", path, connectorID, got, want)
 	}
 }
 
