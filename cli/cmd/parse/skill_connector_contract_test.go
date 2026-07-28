@@ -178,6 +178,10 @@ func TestWorkBuddyTestConnectorIsPinnedAndSandboxOnly(t *testing.T) {
 	if contract.AuthURLDomain != "textin-sandbox.intsig.com" {
 		t.Fatalf("test authUrlDomain = %q", contract.AuthURLDomain)
 	}
+	if contract.Env["XPARSE_OAUTH_CLIENT_ID"] != "cli_textin_xparse_workbuddy" {
+		t.Fatalf("test Connector public client ID = %q",
+			contract.Env["XPARSE_OAUTH_CLIENT_ID"])
+	}
 
 	publishScript := string(readRepositoryFile(t, "cli", "publish-version.sh"))
 	if !strings.Contains(publishScript, `BASE_PATH="xparse-cli/${VERSION}"`) {
