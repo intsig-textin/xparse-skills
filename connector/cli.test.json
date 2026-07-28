@@ -25,7 +25,7 @@
   },
   "authUrlDomain": "textin-sandbox.intsig.com",
   "env": {
-    "XPARSE_OAUTH_CLIENT_ID": "cli_textin_xparse"
+    "XPARSE_OAUTH_CLIENT_ID": "cli_textin_xparse_workbuddy"
   },
   "versionCheck": {
     "command": {
