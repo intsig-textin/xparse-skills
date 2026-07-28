@@ -42,6 +42,9 @@ REQUIRED_FILES=(
   "${SCRIPT_DIR}/install/install.sh"
   "${SCRIPT_DIR}/install/install.ps1"
   "${CONNECTOR_DIR}/cli.test.json"
+  "${CONNECTOR_DIR}/connector-meta.json"
+  "${CONNECTOR_DIR}/icon.png"
+  "${CONNECTOR_DIR}/marketplace-entry.json"
   "${CONNECTOR_TEST_DIR}/enable-workbuddy-test.sh"
   "${CONNECTOR_TEST_DIR}/restore-workbuddy-production.sh"
   "${CONNECTOR_TEST_DIR}/enable-workbuddy-test.ps1"
@@ -71,6 +74,11 @@ upload() {
 upload "${SCRIPT_DIR}/install/install.sh" "${BASE_PATH}/install.sh"
 upload "${SCRIPT_DIR}/install/install.ps1" "${BASE_PATH}/install.ps1"
 upload "${CONNECTOR_DIR}/cli.test.json" "${BASE_PATH}/workbuddy-cli.json"
+upload "${CONNECTOR_DIR}/connector-meta.json" \
+  "${BASE_PATH}/workbuddy-connector-meta.json"
+upload "${CONNECTOR_DIR}/icon.png" "${BASE_PATH}/workbuddy-icon.png"
+upload "${CONNECTOR_DIR}/marketplace-entry.json" \
+  "${BASE_PATH}/workbuddy-marketplace-entry.json"
 upload "${CONNECTOR_TEST_DIR}/enable-workbuddy-test.sh" \
   "${BASE_PATH}/enable-workbuddy-test.sh"
 upload "${CONNECTOR_TEST_DIR}/restore-workbuddy-production.sh" \

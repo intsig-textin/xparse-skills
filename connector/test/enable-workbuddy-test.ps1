@@ -7,76 +7,170 @@ $DownloadBase = if ($env:XPARSER_DOWNLOAD_BASE) {
     "https://dllf.intsig.net/download/2026/Solution/xparse-cli"
 }
 $UserHome = [Environment]::GetFolderPath("UserProfile")
+$MarketplaceRoot = if ($env:WORKBUDDY_MARKETPLACE_ROOT) {
+    $env:WORKBUDDY_MARKETPLACE_ROOT
+} else {
+    Join-Path $UserHome ".workbuddy\connectors-marketplace"
+}
+$CatalogFile = if ($env:WORKBUDDY_CONNECTOR_CATALOG) {
+    $env:WORKBUDDY_CONNECTOR_CATALOG
+} else {
+    Join-Path $MarketplaceRoot ".codebuddy-connector\connectors.json"
+}
+$ConnectorsDir = if ($env:WORKBUDDY_CONNECTORS_DIR) {
+    $env:WORKBUDDY_CONNECTORS_DIR
+} else {
+    Join-Path $MarketplaceRoot "connectors"
+}
 $ConnectorDir = if ($env:WORKBUDDY_CONNECTOR_DIR) {
     $env:WORKBUDDY_CONNECTOR_DIR
 } else {
-    Join-Path $UserHome ".workbuddy\connectors-marketplace\connectors\textin-xparse"
+    Join-Path $ConnectorsDir "textin-xparse"
 }
-$ConnectorFile = Join-Path $ConnectorDir "cli.json"
-$ConnectorBackup = "${ConnectorFile}.production.bak"
+$ConnectorBackup = "${ConnectorDir}.production.bak"
+$CatalogBackup = "${CatalogFile}.textin-xparse.production.bak"
 $ProfileDir = if ($env:XPARSE_WORKBUDDY_PROFILE_DIR) {
     $env:XPARSE_WORKBUDDY_PROFILE_DIR
 } else {
     Join-Path $UserHome ".xparse-cli\profiles\workbuddy"
 }
 $ProfileBackup = "${ProfileDir}.production.bak"
-$DownloadFile = "${ConnectorFile}.download"
+$CLIPath = if ($env:XPARSE_CLI_PATH) {
+    $env:XPARSE_CLI_PATH
+} else {
+    Join-Path $UserHome ".xparse-cli\bin\xparse-cli.exe"
+}
+$CLIBackup = "${CLIPath}.production.bak"
+$StageDir = Join-Path $ConnectorsDir ".textin-xparse.test-download.$PID"
+$CatalogDownload = "${CatalogFile}.textin-xparse-test.download.${PID}"
+$EntryDownload = "${CatalogFile}.textin-xparse-entry.download.${PID}"
+$MarkerFile = Join-Path $ConnectorDir ".workbuddy-test"
+$UTF8NoBOM = New-Object System.Text.UTF8Encoding($false)
 
-if (-not (Test-Path -LiteralPath $ConnectorFile -PathType Leaf)) {
-    throw "未找到 TextIn xParse 的 WorkBuddy 配置：${ConnectorFile}。请先安装并启动一次 WorkBuddy。"
+function Get-TestAsset {
+    param(
+        [string]$RemoteName,
+        [string]$Destination
+    )
+    if ($env:XPARSE_TEST_ASSET_DIR) {
+        Copy-Item -LiteralPath (Join-Path $env:XPARSE_TEST_ASSET_DIR $RemoteName) `
+            -Destination $Destination
+    } else {
+        $AssetURL = "${DownloadBase}/${Version}/${RemoteName}"
+        Write-Host "正在下载：${AssetURL}"
+        Invoke-WebRequest -Uri $AssetURL -OutFile $Destination -UseBasicParsing
+    }
 }
 
-try {
-    if ($env:XPARSE_TEST_CONNECTOR_FILE) {
-        Copy-Item -LiteralPath $env:XPARSE_TEST_CONNECTOR_FILE -Destination $DownloadFile -Force
-    } else {
-        $ConnectorURL = if ($env:XPARSE_TEST_CONNECTOR_URL) {
-            $env:XPARSE_TEST_CONNECTOR_URL
-        } else {
-            "${DownloadBase}/${Version}/workbuddy-cli.json"
+function Clear-TestDownloads {
+    foreach ($Path in @(
+        (Join-Path $StageDir "cli.json"),
+        (Join-Path $StageDir "connector-meta.json"),
+        (Join-Path $StageDir "icon.png"),
+        (Join-Path $StageDir ".workbuddy-test"),
+        $CatalogDownload,
+        $EntryDownload
+    )) {
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            Remove-Item -LiteralPath $Path -Force
         }
-        Write-Host "正在下载 WorkBuddy 测试配置：${ConnectorURL}"
-        Invoke-WebRequest -Uri $ConnectorURL -OutFile $DownloadFile -UseBasicParsing
     }
+    if (Test-Path -LiteralPath $StageDir -PathType Container) {
+        Remove-Item -LiteralPath $StageDir
+    }
+}
 
-    $TestConfig = Get-Content -LiteralPath $DownloadFile -Raw | ConvertFrom-Json
-    if ($TestConfig.env.XPARSE_OAUTH_CLIENT_ID -ne "cli_textin_xparse_workbuddy") {
-        throw "下载的文件不是预期的 WorkBuddy 测试配置。"
+if (-not (Test-Path -LiteralPath $CatalogFile -PathType Leaf)) {
+    throw "未找到 WorkBuddy Connector 注册表：${CatalogFile}。请先安装并启动一次 WorkBuddy。"
+}
+if (-not (Test-Path -LiteralPath $ConnectorsDir -PathType Container)) {
+    New-Item -ItemType Directory -Path $ConnectorsDir -Force | Out-Null
+}
+New-Item -ItemType Directory -Path $StageDir | Out-Null
+
+try {
+    Get-TestAsset "workbuddy-cli.json" (Join-Path $StageDir "cli.json")
+    Get-TestAsset "workbuddy-connector-meta.json" (Join-Path $StageDir "connector-meta.json")
+    Get-TestAsset "workbuddy-icon.png" (Join-Path $StageDir "icon.png")
+    Get-TestAsset "workbuddy-marketplace-entry.json" $EntryDownload
+
+    $TestCLI = Get-Content -LiteralPath (Join-Path $StageDir "cli.json") -Raw |
+        ConvertFrom-Json
+    $TestMeta = Get-Content -LiteralPath (Join-Path $StageDir "connector-meta.json") -Raw |
+        ConvertFrom-Json
+    $TestEntry = Get-Content -LiteralPath $EntryDownload -Raw | ConvertFrom-Json
+    if ($TestCLI.env.XPARSE_OAUTH_CLIENT_ID -ne "cli_textin_xparse_workbuddy") {
+        throw "下载的 CLI 配置不是预期的 WorkBuddy 测试配置。"
     }
-    if ($TestConfig.authUrlDomain -ne "textin-sandbox.intsig.com") {
-        throw "下载的配置没有指向 TextIn 测试环境。"
+    if ($TestCLI.authUrlDomain -ne "textin-sandbox.intsig.com") {
+        throw "下载的 CLI 配置没有指向 TextIn 测试环境。"
     }
-    if ((Get-Content -LiteralPath $DownloadFile -Raw).Contains("/latest/")) {
+    if ($TestMeta.source -ne "textin-xparse") {
+        throw "下载的 Connector 元数据无效。"
+    }
+    if ($TestEntry.id -ne "textin-xparse") {
+        throw "下载的 marketplace 注册项无效。"
+    }
+    if ((Get-Content -LiteralPath (Join-Path $StageDir "cli.json") -Raw).Contains("/latest/")) {
         throw "测试配置不能引用 latest 目录。"
     }
+    if ((Get-Item -LiteralPath (Join-Path $StageDir "icon.png")).Length -eq 0) {
+        throw "下载的 Connector 图标为空。"
+    }
+    [System.IO.File]::WriteAllText(
+        (Join-Path $StageDir ".workbuddy-test"),
+        "${Version}`n",
+        $UTF8NoBOM
+    )
 
-    $CurrentConfig = Get-Content -LiteralPath $ConnectorFile -Raw | ConvertFrom-Json
-    if ($CurrentConfig.env.XPARSE_OAUTH_CLIENT_ID -eq "cli_textin_xparse_workbuddy") {
-        Move-Item -LiteralPath $DownloadFile -Destination $ConnectorFile -Force
-        Write-Host "WorkBuddy 已在使用 TextIn 测试配置，配置已刷新。"
+    if (Test-Path -LiteralPath $MarkerFile -PathType Leaf) {
+        foreach ($Name in @("cli.json", "connector-meta.json", "icon.png", ".workbuddy-test")) {
+            Move-Item -LiteralPath (Join-Path $StageDir $Name) `
+                -Destination (Join-Path $ConnectorDir $Name) -Force
+        }
+        Write-Host "WorkBuddy 已安装 TextIn xParse 测试 Connector，文件已刷新。"
     } else {
-        if (Test-Path -LiteralPath $ConnectorBackup) {
-            throw "检测到未恢复的生产配置备份：${ConnectorBackup}。请先运行恢复脚本。"
-        }
-        if ((Test-Path -LiteralPath $ProfileDir -PathType Container) -and
-            (Test-Path -LiteralPath $ProfileBackup)) {
-            throw "检测到未恢复的 WorkBuddy profile 备份：${ProfileBackup}。请先运行恢复脚本。"
+        foreach ($Backup in @(
+            $CatalogBackup,
+            $ConnectorBackup,
+            $ProfileBackup,
+            $CLIBackup
+        )) {
+            if (Test-Path -LiteralPath $Backup) {
+                throw "检测到未恢复的备份：${Backup}。请先运行恢复脚本。"
+            }
         }
 
-        Move-Item -LiteralPath $ConnectorFile -Destination $ConnectorBackup
+        $Catalog = Get-Content -LiteralPath $CatalogFile -Raw | ConvertFrom-Json
+        $ExistingEntries = @(
+            $Catalog.connectors | Where-Object { $_.id -eq "textin-xparse" }
+        )
+        if ($ExistingEntries.Count -eq 0) {
+            $Catalog.connectors = @($TestEntry) + @($Catalog.connectors)
+        }
+        $CatalogJSON = $Catalog | ConvertTo-Json -Depth 100
+        [System.IO.File]::WriteAllText($CatalogDownload, "${CatalogJSON}`n", $UTF8NoBOM)
+        Get-Content -LiteralPath $CatalogDownload -Raw | ConvertFrom-Json | Out-Null
+
+        Copy-Item -LiteralPath $CatalogFile -Destination $CatalogBackup
+        if (Test-Path -LiteralPath $ConnectorDir -PathType Container) {
+            Move-Item -LiteralPath $ConnectorDir -Destination $ConnectorBackup
+        }
         if (Test-Path -LiteralPath $ProfileDir -PathType Container) {
             Move-Item -LiteralPath $ProfileDir -Destination $ProfileBackup
         }
-        Move-Item -LiteralPath $DownloadFile -Destination $ConnectorFile
-        Write-Host "已备份生产配置，并切换到 TextIn 测试环境。"
+        if (Test-Path -LiteralPath $CLIPath -PathType Leaf) {
+            Move-Item -LiteralPath $CLIPath -Destination $CLIBackup
+        }
+        Move-Item -LiteralPath $CatalogDownload -Destination $CatalogFile -Force
+        Move-Item -LiteralPath $StageDir -Destination $ConnectorDir
+        Write-Host "已注入 TextIn xParse 测试 Connector，并备份执行前的 WorkBuddy 状态。"
     }
 } finally {
-    if (Test-Path -LiteralPath $DownloadFile -PathType Leaf) {
-        Remove-Item -LiteralPath $DownloadFile -Force
-    }
+    Clear-TestDownloads
 }
 
 Write-Host ""
 Write-Host "请完全退出并重新打开 WorkBuddy，然后在 TextIn xParse 中点击“连接”。"
 Write-Host "WorkBuddy 将自动安装指定测试版 CLI，并打开 TextIn 测试环境授权页。"
-Write-Host "测试结束后请运行 restore-workbuddy-production.ps1 恢复生产配置和原登录态。"
+Write-Host "测试结束后请运行 restore-workbuddy-production.ps1 恢复执行前状态。"
