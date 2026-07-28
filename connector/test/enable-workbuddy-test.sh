@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-VERSION="${XPARSER_VERSION:-v2.1.0-workbuddy-test.1}"
+VERSION="${XPARSER_VERSION:-v2.1.0-workbuddy-test.2}"
 DOWNLOAD_BASE="${XPARSER_DOWNLOAD_BASE:-https://dllf.intsig.net/download/2026/Solution/xparse-cli}"
 MARKETPLACE_ROOT="${WORKBUDDY_MARKETPLACE_ROOT:-${HOME}/.workbuddy/connectors-marketplace}"
 CATALOG_FILE="${WORKBUDDY_CONNECTOR_CATALOG:-${MARKETPLACE_ROOT}/.codebuddy-connector/connectors.json}"
