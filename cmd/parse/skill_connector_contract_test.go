@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"image/png"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -191,6 +192,185 @@ func TestWorkBuddyTestConnectorIsPinnedAndSandboxOnly(t *testing.T) {
 		strings.Contains(publishScript, `"xparse-cli/latest/`) {
 		t.Fatal("isolated publisher contains a rolling release upload destination")
 	}
+	for _, artifact := range []string{
+		`"${BASE_PATH}/workbuddy-cli.json"`,
+		`"${BASE_PATH}/enable-workbuddy-test.sh"`,
+		`"${BASE_PATH}/restore-workbuddy-production.sh"`,
+		`"${BASE_PATH}/enable-workbuddy-test.ps1"`,
+		`"${BASE_PATH}/restore-workbuddy-production.ps1"`,
+	} {
+		if !strings.Contains(publishScript, artifact) {
+			t.Fatalf("isolated publisher does not upload %s", artifact)
+		}
+	}
+}
+
+func TestWorkBuddyMacOSTestSwitchPreservesProductionState(t *testing.T) {
+	tempDir := t.TempDir()
+	connectorDir := filepath.Join(tempDir, "connector")
+	profileDir := filepath.Join(tempDir, "profiles", "workbuddy")
+	if err := os.MkdirAll(connectorDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(profileDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	productionConnector := readRepositoryFile(t, "connector", "cli.json")
+	testConnectorPath := repositoryPath(t, "connector", "cli.test.json")
+	connectorPath := filepath.Join(connectorDir, "cli.json")
+	if err := os.WriteFile(connectorPath, productionConnector, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	productionProfile := []byte("base_url: https://api.textin.com\n")
+	if err := os.WriteFile(
+		filepath.Join(profileDir, "config.yaml"),
+		productionProfile,
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+	productionToken := []byte(`{"client_id":"cli_textin_xparse","access_token":"secret"}`)
+	if err := os.WriteFile(
+		filepath.Join(profileDir, "oauth-token.json"),
+		productionToken,
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	runWorkBuddyScript(t, "enable-workbuddy-test.sh", connectorDir, profileDir,
+		"XPARSE_TEST_CONNECTOR_FILE="+testConnectorPath)
+	assertFileContains(t, connectorPath, "cli_textin_xparse_workbuddy")
+	assertFileContains(t, connectorPath, "textin-sandbox.intsig.com")
+	assertFileContains(t, connectorPath+".production.bak", `"cli_textin_xparse"`)
+	assertFileContent(t, filepath.Join(profileDir+".production.bak", "config.yaml"),
+		productionProfile)
+	assertFileContent(t, filepath.Join(profileDir+".production.bak", "oauth-token.json"),
+		productionToken)
+	if _, err := os.Stat(profileDir); !os.IsNotExist(err) {
+		t.Fatalf("test switch kept the production profile active: %v", err)
+	}
+
+	runWorkBuddyScript(t, "enable-workbuddy-test.sh", connectorDir, profileDir,
+		"XPARSE_TEST_CONNECTOR_FILE="+testConnectorPath)
+	assertFileContent(t, filepath.Join(profileDir+".production.bak", "oauth-token.json"),
+		productionToken)
+
+	if err := os.MkdirAll(profileDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	testToken := []byte(`{"client_id":"cli_textin_xparse_workbuddy","access_token":"test"}`)
+	if err := os.WriteFile(
+		filepath.Join(profileDir, "oauth-token.json"),
+		testToken,
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	runWorkBuddyScript(t, "restore-workbuddy-production.sh", connectorDir, profileDir)
+	assertFileContains(t, connectorPath, `"cli_textin_xparse"`)
+	assertFileContent(t, filepath.Join(profileDir, "config.yaml"), productionProfile)
+	assertFileContent(t, filepath.Join(profileDir, "oauth-token.json"), productionToken)
+	testProfileBackups, err := filepath.Glob(profileDir + ".test.*.bak")
+	if err != nil || len(testProfileBackups) != 1 {
+		t.Fatalf("test profile backups = %v, err = %v", testProfileBackups, err)
+	}
+	assertFileContent(t, filepath.Join(testProfileBackups[0], "oauth-token.json"), testToken)
+}
+
+func TestWorkBuddyWindowsSwitchScriptsMatchMacOSSafetyContract(t *testing.T) {
+	for _, name := range []string{
+		"enable-workbuddy-test.ps1",
+		"restore-workbuddy-production.ps1",
+	} {
+		script := string(readRepositoryFile(t, "connector", "test", name))
+		for _, expected := range []string{
+			"WORKBUDDY_CONNECTOR_DIR",
+			"XPARSE_WORKBUDDY_PROFILE_DIR",
+			"production.bak",
+			"ConvertFrom-Json",
+			"Move-Item",
+		} {
+			if !strings.Contains(script, expected) {
+				t.Fatalf("%s does not contain %q", name, expected)
+			}
+		}
+	}
+	enableScript := string(readRepositoryFile(
+		t,
+		"connector",
+		"test",
+		"enable-workbuddy-test.ps1",
+	))
+	for _, expected := range []string{
+		"v2.1.0-workbuddy-test.1",
+		"cli_textin_xparse_workbuddy",
+		"textin-sandbox.intsig.com",
+		"workbuddy-cli.json",
+	} {
+		if !strings.Contains(enableScript, expected) {
+			t.Fatalf("Windows enable script does not contain %q", expected)
+		}
+	}
+	if strings.Contains(enableScript, "${DownloadBase}/latest/workbuddy-cli.json") ||
+		strings.Contains(enableScript, `$env:XPARSER_VERSION } else { "latest" }`) {
+		t.Fatal("Windows enable script references the rolling release directory")
+	}
+}
+
+func runWorkBuddyScript(
+	t *testing.T,
+	name, connectorDir, profileDir string,
+	extraEnv ...string,
+) {
+	t.Helper()
+	command := exec.Command(
+		"/bin/sh",
+		repositoryPath(t, "connector", "test", name),
+	)
+	command.Env = append(
+		os.Environ(),
+		"WORKBUDDY_CONNECTOR_DIR="+connectorDir,
+		"XPARSE_WORKBUDDY_PROFILE_DIR="+profileDir,
+	)
+	command.Env = append(command.Env, extraEnv...)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("%s failed: %v\n%s", name, err, output)
+	}
+}
+
+func assertFileContains(t *testing.T, path, expected string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(data, []byte(expected)) {
+		t.Fatalf("%s does not contain %q", path, expected)
+	}
+}
+
+func assertFileContent(t *testing.T, path string, expected []byte) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(data, expected) {
+		t.Fatalf("%s = %q, want %q", path, data, expected)
+	}
+}
+
+func repositoryPath(t *testing.T, pathParts ...string) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	allParts := append([]string{dir, "..", "..", ".."}, pathParts...)
+	return filepath.Clean(filepath.Join(allParts...))
 }
 
 func toWorkBuddyString(value any) string {
