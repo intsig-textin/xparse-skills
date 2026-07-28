@@ -24,6 +24,8 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DIST_DIR="${SCRIPT_DIR}/dist"
+CONNECTOR_DIR="${SCRIPT_DIR}/../connector"
+CONNECTOR_TEST_DIR="${CONNECTOR_DIR}/test"
 BASE_PATH="xparse-cli/${VERSION}"
 UPLOAD_SCRIPT="${SCRIPT_DIR}/upload.sh"
 
@@ -39,6 +41,11 @@ BINARY_FILES=(
 REQUIRED_FILES=(
   "${SCRIPT_DIR}/install/install.sh"
   "${SCRIPT_DIR}/install/install.ps1"
+  "${CONNECTOR_DIR}/cli.test.json"
+  "${CONNECTOR_TEST_DIR}/enable-workbuddy-test.sh"
+  "${CONNECTOR_TEST_DIR}/restore-workbuddy-production.sh"
+  "${CONNECTOR_TEST_DIR}/enable-workbuddy-test.ps1"
+  "${CONNECTOR_TEST_DIR}/restore-workbuddy-production.ps1"
 )
 for file in "${BINARY_FILES[@]}"; do
   REQUIRED_FILES+=("${DIST_DIR}/${file}")
@@ -63,6 +70,15 @@ upload() {
 
 upload "${SCRIPT_DIR}/install/install.sh" "${BASE_PATH}/install.sh"
 upload "${SCRIPT_DIR}/install/install.ps1" "${BASE_PATH}/install.ps1"
+upload "${CONNECTOR_DIR}/cli.test.json" "${BASE_PATH}/workbuddy-cli.json"
+upload "${CONNECTOR_TEST_DIR}/enable-workbuddy-test.sh" \
+  "${BASE_PATH}/enable-workbuddy-test.sh"
+upload "${CONNECTOR_TEST_DIR}/restore-workbuddy-production.sh" \
+  "${BASE_PATH}/restore-workbuddy-production.sh"
+upload "${CONNECTOR_TEST_DIR}/enable-workbuddy-test.ps1" \
+  "${BASE_PATH}/enable-workbuddy-test.ps1"
+upload "${CONNECTOR_TEST_DIR}/restore-workbuddy-production.ps1" \
+  "${BASE_PATH}/restore-workbuddy-production.ps1"
 for file in "${BINARY_FILES[@]}"; do
   upload "${DIST_DIR}/${file}" "${BASE_PATH}/${file}"
 done
