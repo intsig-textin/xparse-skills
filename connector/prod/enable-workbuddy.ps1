@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$Version = if ($env:XPARSER_VERSION) { $env:XPARSER_VERSION } else { "v2.1.0" }
+$Version = if ($env:XPARSER_VERSION) { $env:XPARSER_VERSION } else { "v2.1.0-1" }
 $DownloadBase = if ($env:XPARSER_DOWNLOAD_BASE) {
     $env:XPARSER_DOWNLOAD_BASE
 } else {

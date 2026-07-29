@@ -231,7 +231,7 @@ func TestWorkBuddyProdConnectorIsPinnedAndProductionOnly(t *testing.T) {
 	}
 	for _, platform := range []string{"darwin", "linux", "win32"} {
 		initCommand := contract.Init[platform]
-		if !strings.Contains(initCommand, "/v2.1.0/") {
+		if !strings.Contains(initCommand, "/v2.1.0-1/") {
 			t.Fatalf("platform %q production init is not pinned: %q",
 				platform, initCommand)
 		}
@@ -378,7 +378,7 @@ func TestWorkBuddyProdDistributionArtifacts(t *testing.T) {
 	for _, scriptName := range []string{"enable-workbuddy.sh", "enable-workbuddy.ps1"} {
 		script := string(readRepositoryFile(t, "connector", "prod", scriptName))
 		for _, expected := range []string{
-			"v2.1.0",
+			"v2.1.0-1",
 			"api.textin.com",
 			"cli_textin_xparse_workbuddy",
 			"XPARSE_BASE_URL",
