@@ -31,6 +31,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DIST_DIR="${SCRIPT_DIR}/dist"
 CONNECTOR_DIR="${SCRIPT_DIR}/../connector"
 CONNECTOR_TEST_DIR="${CONNECTOR_DIR}/test"
+CONNECTOR_PROD_DIR="${CONNECTOR_DIR}/prod"
 SKILLS_DIR="${SCRIPT_DIR}/../skills"
 BASE_PATH="xparse-cli/${VERSION}"
 UPLOAD_SCRIPT="${SCRIPT_DIR}/upload.sh"
@@ -38,6 +39,9 @@ SKILL_ARCHIVE="${DIST_DIR}/workbuddy-xparse-parse.zip"
 SKILL_ARCHIVE_TMP="${DIST_DIR}/.workbuddy-xparse-parse.$$.zip"
 PINNED_INSTALL_SH="${DIST_DIR}/.install.${VERSION}.$$.sh"
 PINNED_INSTALL_PS1="${DIST_DIR}/.install.${VERSION}.$$.ps1"
+REVIEW_STAGE="${DIST_DIR}/.textin-xparse-workbuddy-review.${VERSION}.$$"
+REVIEW_ARCHIVE="${DIST_DIR}/textin-xparse-workbuddy-${VERSION}-review.zip"
+REVIEW_ARCHIVE_TMP="${DIST_DIR}/.textin-xparse-workbuddy-${VERSION}-review.$$.zip"
 
 if [ "$RELEASE_KIND" = "prod" ]; then
   CONNECTOR_CONFIG="${CONNECTOR_DIR}/cli.json"
@@ -46,7 +50,14 @@ else
 fi
 
 cleanup() {
-  rm -f "${SKILL_ARCHIVE_TMP}" "${PINNED_INSTALL_SH}" "${PINNED_INSTALL_PS1}"
+  rm -f \
+    "${SKILL_ARCHIVE_TMP}" \
+    "${PINNED_INSTALL_SH}" \
+    "${PINNED_INSTALL_PS1}" \
+    "${REVIEW_ARCHIVE_TMP}"
+  if [ -d "${REVIEW_STAGE}" ]; then
+    find "${REVIEW_STAGE}" -depth -delete 2>/dev/null || true
+  fi
 }
 trap cleanup EXIT
 
@@ -74,6 +85,12 @@ if [ "$RELEASE_KIND" = "test" ]; then
     "${CONNECTOR_TEST_DIR}/restore-workbuddy-production.sh"
     "${CONNECTOR_TEST_DIR}/enable-workbuddy-test.ps1"
     "${CONNECTOR_TEST_DIR}/restore-workbuddy-production.ps1"
+  )
+else
+  REQUIRED_FILES+=(
+    "${CONNECTOR_PROD_DIR}/enable-workbuddy.sh"
+    "${CONNECTOR_PROD_DIR}/enable-workbuddy.ps1"
+    "${CONNECTOR_PROD_DIR}/REVIEW.md"
   )
 fi
 for file in "${BINARY_FILES[@]}"; do
@@ -127,6 +144,44 @@ if [ "$RELEASE_KIND" = "prod" ]; then
     echo "Production Connector config must not reference latest."
     exit 1
   fi
+
+  REVIEW_ROOT="${REVIEW_STAGE}/textin-xparse"
+  mkdir -p "${REVIEW_ROOT}/skills"
+  cp "${CONNECTOR_CONFIG}" "${REVIEW_ROOT}/cli.json"
+  cp "${CONNECTOR_DIR}/connector-meta.json" "${REVIEW_ROOT}/connector-meta.json"
+  cp "${CONNECTOR_DIR}/icon.png" "${REVIEW_ROOT}/icon.png"
+  cp "${CONNECTOR_DIR}/marketplace-entry.json" \
+    "${REVIEW_ROOT}/marketplace-entry.json"
+  cp "${CONNECTOR_PROD_DIR}/REVIEW.md" "${REVIEW_ROOT}/REVIEW.md"
+  cp -R "${SKILLS_DIR}/xparse-parse" "${REVIEW_ROOT}/skills/xparse-parse"
+  (
+    cd "${REVIEW_ROOT}"
+    find . -type f ! -name SHA256SUMS -print |
+      LC_ALL=C sort |
+      while IFS= read -r file; do
+        if command -v sha256sum >/dev/null 2>&1; then
+          sha256sum "${file}"
+        else
+          shasum -a 256 "${file}"
+        fi
+      done
+  ) > "${REVIEW_ROOT}/SHA256SUMS"
+  (
+    cd "${REVIEW_STAGE}"
+    COPYFILE_DISABLE=1 zip -X -qr "${REVIEW_ARCHIVE_TMP}" textin-xparse
+  )
+  mv -f "${REVIEW_ARCHIVE_TMP}" "${REVIEW_ARCHIVE}"
+
+  if unzip -l "${REVIEW_ARCHIVE}" |
+    grep -Eq '(^|/)(\._|__MACOSX|xparse-doc-tools|\.workbuddy-test)'; then
+    echo "Production review archive contains forbidden files."
+    exit 1
+  fi
+  if unzip -p "${REVIEW_ARCHIVE}" textin-xparse/cli.json |
+    grep -Eq 'textin-api-pre\.intsig\.com|/latest/'; then
+    echo "Production review archive contains pre or latest references."
+    exit 1
+  fi
 fi
 
 upload() {
@@ -161,6 +216,13 @@ if [ "$RELEASE_KIND" = "test" ]; then
     "${BASE_PATH}/enable-workbuddy-test.ps1" "text/plain; charset=utf-8"
   upload "${CONNECTOR_TEST_DIR}/restore-workbuddy-production.ps1" \
     "${BASE_PATH}/restore-workbuddy-production.ps1" "text/plain; charset=utf-8"
+else
+  upload "${CONNECTOR_PROD_DIR}/enable-workbuddy.sh" \
+    "${BASE_PATH}/enable-workbuddy.sh" "text/plain; charset=utf-8"
+  upload "${CONNECTOR_PROD_DIR}/enable-workbuddy.ps1" \
+    "${BASE_PATH}/enable-workbuddy.ps1" "text/plain; charset=utf-8"
+  upload "${REVIEW_ARCHIVE}" \
+    "${BASE_PATH}/textin-xparse-workbuddy-${VERSION}-review.zip"
 fi
 for file in "${BINARY_FILES[@]}"; do
   upload "${DIST_DIR}/${file}" "${BASE_PATH}/${file}"

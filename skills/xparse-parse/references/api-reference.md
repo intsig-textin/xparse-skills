@@ -217,7 +217,7 @@ This section groups error codes by handling intent. It is meant for CLI and skil
 
 | Code | Meaning | Action |
 |------|---------|--------|
-| 40003 | Insufficient balance | Top up account or switch to free API if applicable |
+| 40003 | Insufficient balance | Purchase credits at the [TextIn xParse purchase page](https://www.textin.com/market/chager/pdf_to_markdown), or switch to the free API if applicable |
 
 #### Rate & Free-Tier Limits
 
