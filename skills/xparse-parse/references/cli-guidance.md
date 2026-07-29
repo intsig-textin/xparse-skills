@@ -24,15 +24,17 @@ export XPARSE_SECRET_CODE=your_secret_code
 
 | `--api` value | Behavior |
 |---------------|----------|
-| _(omitted)_ | Auto-select from the requested/available auth method, otherwise free |
-| `free` | Force free API |
-| `paid` | Force paid API; pair with `--auth-method app-key` or `oauth` when both are configured |
+| _(omitted)_ | Always use the anonymous free API |
+| `auto` | Compatibility alias for `free`; stored credentials are ignored |
+| `free` | Always use the anonymous free API |
+| `paid` | Explicitly use the paid API; pair with `--auth-method app-key` or `oauth` when both are configured |
 
 AppKey priority: CLI flags → env vars → config file. Normal OAuth login uses
 the shipped public client automatically; private deployments may override it
 through a CLI flag, `XPARSE_OAUTH_CLIENT_ID`, or the config file.
 WorkBuddy keeps its credentials in the isolated `workbuddy` profile and uses
-Device OAuth.
+Device OAuth. Login never changes the default parse route; only `--api paid`
+permits paid API use.
 
 See [authentication.md](authentication.md) for all login modes and
 [textin-key-setup.md](textin-key-setup.md) for legacy AppKey setup.

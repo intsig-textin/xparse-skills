@@ -52,6 +52,16 @@ Outside WorkBuddy, keep using the standalone `xparse-cli <command>` form.
 - If the default parse result is sufficient, stop. Do not upgrade to `--include-char-details` without a task-specific reason.
 - Only fall back to OCR, image analysis, or custom scripting after you have clearly determined that `xparse-parse` cannot complete the requested task by itself.
 
+## Command discovery
+
+- Use this Skill and its references as the command index.
+- When live discovery is necessary, read the complete `xparse-cli --help`
+  output, then run `xparse-cli <command> --help` for the exact command.
+- Never pipe help output through `head`, `tail`, or a fixed `sed` range. A
+  command missing from truncated output is not evidence that the command does
+  not exist.
+- In WorkBuddy, include `--profile workbuddy` in discovery commands too.
+
 ## Setup
 
 Check if installed: `xparse-cli version`
@@ -89,6 +99,7 @@ xparse-cli parse report.pdf --api free              # Markdown → stdout
 | Page range | `xparse-cli parse <FILE> --api free --page-range 1-5` |
 | Encrypted doc | `xparse-cli parse <FILE> --api free --password <PWD>` |
 | Character details (bbox, confidence, candidate per char) | `xparse-cli parse <FILE> --api free --view json --output <DIR> --include-char-details` |
+| Show free quota | `xparse-cli quota` |
 | Explicit paid OAuth | `xparse-cli parse <FILE> --api paid --auth-method oauth` |
 | Explicit paid AppKey | `xparse-cli parse <FILE> --api paid --auth-method app-key` |
 

@@ -1,8 +1,8 @@
 {
   "init": {
-    "darwin": "curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/v2.1.0-workbuddy-test.3/install.sh | env XPARSER_VERSION=v2.1.0-workbuddy-test.3 sh && \"$HOME/.local/bin/xparse-cli\" --profile workbuddy config set base_url https://textin-sandbox.intsig.com",
-    "linux": "curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/v2.1.0-workbuddy-test.3/install.sh | env XPARSER_VERSION=v2.1.0-workbuddy-test.3 sh && \"$HOME/.local/bin/xparse-cli\" --profile workbuddy config set base_url https://textin-sandbox.intsig.com",
-    "win32": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:XPARSER_VERSION='v2.1.0-workbuddy-test.3'; irm https://dllf.intsig.net/download/2026/Solution/xparse-cli/v2.1.0-workbuddy-test.3/install.ps1 | iex; & \\\"$env:USERPROFILE\\.xparse-cli\\bin\\xparse-cli.exe\\\" --profile workbuddy config set base_url https://textin-sandbox.intsig.com\""
+    "darwin": "curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/v2.1.0-workbuddy-pre.1/install.sh | env XPARSER_VERSION=v2.1.0-workbuddy-pre.1 sh && \"$HOME/.local/bin/xparse-cli\" --profile workbuddy config set base_url https://textin-api-pre.intsig.com",
+    "linux": "curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/v2.1.0-workbuddy-pre.1/install.sh | env XPARSER_VERSION=v2.1.0-workbuddy-pre.1 sh && \"$HOME/.local/bin/xparse-cli\" --profile workbuddy config set base_url https://textin-api-pre.intsig.com",
+    "win32": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:XPARSER_VERSION='v2.1.0-workbuddy-pre.1'; irm https://dllf.intsig.net/download/2026/Solution/xparse-cli/v2.1.0-workbuddy-pre.1/install.ps1 | iex; & \\\"$env:USERPROFILE\\.xparse-cli\\bin\\xparse-cli.exe\\\" --profile workbuddy config set base_url https://textin-api-pre.intsig.com\""
   },
   "auth": {
     "darwin": "\"$HOME/.local/bin/xparse-cli\" --profile workbuddy auth device --open-browser=always --output=jsonl",
@@ -23,7 +23,7 @@
     "logged_in": "true",
     "method": "oauth"
   },
-  "authUrlDomain": "textin-sandbox.intsig.com",
+  "authUrlDomain": "textin-api-pre.intsig.com",
   "env": {
     "XPARSE_OAUTH_CLIENT_ID": "cli_textin_xparse_workbuddy"
   },

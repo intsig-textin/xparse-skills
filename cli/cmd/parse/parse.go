@@ -70,7 +70,7 @@ func init() {
 	rootCmd.AddCommand(parseCmd)
 
 	parseCmd.Flags().StringVar(&parseView, "view", "markdown", "Output view: markdown, json")
-	parseCmd.Flags().StringVar(&parseAPI, "api", "", "API mode: auto, free, paid (default: auto)")
+	parseCmd.Flags().StringVar(&parseAPI, "api", "free", "API mode: auto, free, paid (default: free; auto is an alias for free)")
 	parseCmd.Flags().StringVar(&parseAuthMethod, "auth-method", "", "Paid API authentication: app-key, oauth")
 	parseCmd.Flags().StringVar(&parsePageRangeFlag, "page-range", "", `Page range, e.g. "1-5" or "1-2,5-10"`)
 	parseCmd.Flags().StringVar(&parsePassword, "password", "", "Password for encrypted documents")
@@ -113,10 +113,10 @@ func runParse(cmd *cobra.Command, args []string) error {
 	// Validate --api
 	var apiMode APIMode
 	switch parseAPI {
-	case "", "auto":
-		apiMode = APIModeAuto
-	case "free", "paid":
-		apiMode = APIMode(parseAPI)
+	case "", "auto", "free":
+		apiMode = APIModeFree
+	case "paid":
+		apiMode = APIModePaid
 	default:
 		return usageErr("invalid --api value, must be 'auto', 'free', or 'paid'",
 			"[fix] use --api auto, --api free, or --api paid")

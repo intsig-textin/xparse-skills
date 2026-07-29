@@ -22,6 +22,13 @@ $ConnectorDir = if ($env:WORKBUDDY_CONNECTOR_DIR) {
     Join-Path $ConnectorsDir "textin-xparse"
 }
 $ConnectorBackup = "${ConnectorDir}.production.bak"
+$MarketplaceIconsDir = if ($env:WORKBUDDY_MARKETPLACE_ICONS_DIR) {
+    $env:WORKBUDDY_MARKETPLACE_ICONS_DIR
+} else {
+    Join-Path $MarketplaceRoot "icons"
+}
+$MarketplaceIcon = Join-Path $MarketplaceIconsDir "textin-xparse.png"
+$MarketplaceIconBackup = "${MarketplaceIcon}.production.bak"
 $CatalogBackup = "${CatalogFile}.textin-xparse.production.bak"
 $ProfileDir = if ($env:XPARSE_WORKBUDDY_PROFILE_DIR) {
     $env:XPARSE_WORKBUDDY_PROFILE_DIR
@@ -35,6 +42,12 @@ $CLIPath = if ($env:XPARSE_CLI_PATH) {
     Join-Path $UserHome ".xparse-cli\bin\xparse-cli.exe"
 }
 $CLIBackup = "${CLIPath}.production.bak"
+$ActiveSkillsDir = if ($env:WORKBUDDY_CONNECTOR_SKILLS_DIR) {
+    $env:WORKBUDDY_CONNECTOR_SKILLS_DIR
+} else {
+    Join-Path $UserHome ".workbuddy\connectors\skills\connector-textin-xparse"
+}
+$ActiveSkillsBackup = "${ActiveSkillsDir}.production.bak"
 $Timestamp = Get-Date -Format "yyyyMMddHHmmss"
 $TestBackupRoot = if ($env:WORKBUDDY_TEST_BACKUP_ROOT) {
     $env:WORKBUDDY_TEST_BACKUP_ROOT
@@ -45,10 +58,34 @@ $ConnectorTestBackup = Join-Path $TestBackupRoot "connector.${Timestamp}"
 $CatalogTestBackup = Join-Path $TestBackupRoot "connectors.${Timestamp}.json"
 $ProfileTestBackup = "${ProfileDir}.test.${Timestamp}.bak"
 $CLITestBackup = "${CLIPath}.test.${Timestamp}.bak"
+$ActiveSkillsTestBackup = Join-Path $TestBackupRoot "activated-skills.${Timestamp}"
+$MarketplaceIconTestBackup = Join-Path $TestBackupRoot "marketplace-icon.${Timestamp}.png"
 $MarkerFile = Join-Path $ConnectorDir ".workbuddy-test"
+$UTF8Strict = New-Object System.Text.UTF8Encoding($false, $true)
+
+function Read-Utf8Json {
+    param([string]$Path)
+    return ([System.IO.File]::ReadAllText($Path, $UTF8Strict) | ConvertFrom-Json)
+}
 
 if (-not (Test-Path -LiteralPath $MarkerFile -PathType Leaf)) {
-    Write-Host "当前未安装 TextIn xParse 测试 Connector，无需恢复。"
+    $OrphanedBackups = @(
+        $CatalogBackup,
+        $ConnectorBackup,
+        $MarketplaceIconBackup,
+        $ProfileBackup,
+        $CLIBackup,
+        $ActiveSkillsBackup
+    ) | Where-Object { Test-Path -LiteralPath $_ }
+    if ($OrphanedBackups.Count -gt 0) {
+        $BackupList = ($OrphanedBackups | ForEach-Object { "  - $_" }) -join "`n"
+        throw @"
+未找到测试 Connector marker，但检测到孤立备份：
+$BackupList
+这些备份可能来自未完成的旧测试事务，无法自动判断是否应恢复。请先归档或人工确认后再运行 enable。
+"@
+    }
+    Write-Host "当前未安装 TextIn xParse 测试 Connector，且没有遗留备份，无需恢复。"
     exit 0
 }
 if (-not (Test-Path -LiteralPath $CatalogBackup -PathType Leaf)) {
@@ -58,8 +95,10 @@ if (-not (Test-Path -LiteralPath $CatalogBackup -PathType Leaf)) {
 foreach ($Target in @(
     $ConnectorTestBackup,
     $CatalogTestBackup,
+    $MarketplaceIconTestBackup,
     $ProfileTestBackup,
-    $CLITestBackup
+    $CLITestBackup,
+    $ActiveSkillsTestBackup
 )) {
     if (Test-Path -LiteralPath $Target) {
         throw "本次恢复的归档目标已存在：${Target}。请稍后重试。"
@@ -72,7 +111,16 @@ if (-not (Test-Path -LiteralPath $TestBackupRoot -PathType Container)) {
 Move-Item -LiteralPath $ConnectorDir -Destination $ConnectorTestBackup
 Move-Item -LiteralPath $CatalogFile -Destination $CatalogTestBackup
 Move-Item -LiteralPath $CatalogBackup -Destination $CatalogFile
-Get-Content -LiteralPath $CatalogFile -Raw | ConvertFrom-Json | Out-Null
+Read-Utf8Json $CatalogFile | Out-Null
+if (Test-Path -LiteralPath $MarketplaceIcon -PathType Leaf) {
+    Move-Item -LiteralPath $MarketplaceIcon -Destination $MarketplaceIconTestBackup
+}
+if (Test-Path -LiteralPath $MarketplaceIconBackup -PathType Leaf) {
+    if (-not (Test-Path -LiteralPath $MarketplaceIconsDir -PathType Container)) {
+        New-Item -ItemType Directory -Path $MarketplaceIconsDir -Force | Out-Null
+    }
+    Move-Item -LiteralPath $MarketplaceIconBackup -Destination $MarketplaceIcon
+}
 
 if (Test-Path -LiteralPath $ConnectorBackup -PathType Container) {
     Move-Item -LiteralPath $ConnectorBackup -Destination $ConnectorDir
@@ -89,8 +137,18 @@ if (Test-Path -LiteralPath $CLIPath -PathType Leaf) {
 if (Test-Path -LiteralPath $CLIBackup -PathType Leaf) {
     Move-Item -LiteralPath $CLIBackup -Destination $CLIPath
 }
+if (Test-Path -LiteralPath $ActiveSkillsDir -PathType Container) {
+    Move-Item -LiteralPath $ActiveSkillsDir -Destination $ActiveSkillsTestBackup
+}
+if (Test-Path -LiteralPath $ActiveSkillsBackup -PathType Container) {
+    $ActiveSkillsParent = Split-Path -Parent $ActiveSkillsDir
+    if (-not (Test-Path -LiteralPath $ActiveSkillsParent -PathType Container)) {
+        New-Item -ItemType Directory -Path $ActiveSkillsParent -Force | Out-Null
+    }
+    Move-Item -LiteralPath $ActiveSkillsBackup -Destination $ActiveSkillsDir
+}
 
-Write-Host "已恢复执行测试脚本前的 WorkBuddy marketplace、Connector、CLI 和 profile 状态。"
+Write-Host "已恢复执行测试脚本前的 WorkBuddy marketplace、Connector、CLI、profile 和已激活 Skill 状态。"
 Write-Host "本次测试 Connector 已归档到：${ConnectorTestBackup}"
 Write-Host ""
 Write-Host "请完全退出并重新打开 WorkBuddy，使恢复后的状态生效。"

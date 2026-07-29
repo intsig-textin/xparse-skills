@@ -34,6 +34,30 @@ func TestXParserClientFromHeader(t *testing.T) {
 	}
 }
 
+func TestResolveAPIModeRequiresExplicitPaid(t *testing.T) {
+	withCredentials := &config.CredentialSource{AppID: "app", SecretCode: "secret"}
+	withoutCredentials := &config.CredentialSource{}
+	for _, testCase := range []struct {
+		name     string
+		mode     APIMode
+		cred     *config.CredentialSource
+		wantFree bool
+	}{
+		{name: "free without credentials", mode: APIModeFree, cred: withoutCredentials, wantFree: true},
+		{name: "free with credentials", mode: APIModeFree, cred: withCredentials, wantFree: true},
+		{name: "auto without credentials", mode: APIModeAuto, cred: withoutCredentials, wantFree: true},
+		{name: "auto with credentials", mode: APIModeAuto, cred: withCredentials, wantFree: true},
+		{name: "paid without credentials", mode: APIModePaid, cred: withoutCredentials, wantFree: false},
+		{name: "paid with credentials", mode: APIModePaid, cred: withCredentials, wantFree: false},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := ResolveAPIMode(testCase.mode, testCase.cred); got != testCase.wantFree {
+				t.Fatalf("ResolveAPIMode(%q) = %v, want %v", testCase.mode, got, testCase.wantFree)
+			}
+		})
+	}
+}
+
 func TestWorkBuddyProfileSetsClientFromHeader(t *testing.T) {
 	t.Setenv(clientFromEnv, "")
 	if err := config.SetProfile(config.ProfileWorkBuddy); err != nil {
