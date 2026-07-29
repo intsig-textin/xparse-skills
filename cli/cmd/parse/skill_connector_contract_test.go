@@ -231,7 +231,7 @@ func TestWorkBuddyProdConnectorIsPinnedAndProductionOnly(t *testing.T) {
 	}
 	for _, platform := range []string{"darwin", "linux", "win32"} {
 		initCommand := contract.Init[platform]
-		if !strings.Contains(initCommand, "/v2.1.0-1/") {
+		if !strings.Contains(initCommand, "/v2.1.0/") {
 			t.Fatalf("platform %q production init is not pinned: %q",
 				platform, initCommand)
 		}

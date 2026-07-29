@@ -1,4 +1,4 @@
-# TextIn xParse WorkBuddy Connector v2.1.0-1
+# TextIn xParse WorkBuddy Connector 修复包 v2.1.0-1
 
 本目录是提交 WorkBuddy 连接器审核的正式材料。
 
@@ -13,7 +13,8 @@
 
 ## 正式环境约束
 
-- CLI 版本固定为 `v2.1.0-1`，不引用 `latest`。
+- WorkBuddy 修复包位于独立的 `v2.1.0-1` 路径，CLI 继续复用固定的
+  `v2.1.0`，不引用 `latest`。
 - OAuth 域名固定为 `api.textin.com`。
 - OAuth client 固定为 `cli_textin_xparse_workbuddy`。
 - Connector 强制设置 `XPARSE_BASE_URL=https://api.textin.com`，安装时也会把

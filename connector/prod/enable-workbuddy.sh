@@ -2,6 +2,7 @@
 set -eu
 
 VERSION="${XPARSER_VERSION:-v2.1.0-1}"
+CLI_VERSION="${XPARSE_CLI_VERSION:-v2.1.0}"
 DOWNLOAD_BASE="${XPARSER_DOWNLOAD_BASE:-https://dllf.intsig.net/download/2026/Solution/xparse-cli}"
 MARKETPLACE_ROOT="${WORKBUDDY_MARKETPLACE_ROOT:-${HOME}/.workbuddy/connectors-marketplace}"
 CATALOG_FILE="${WORKBUDDY_CONNECTOR_CATALOG:-${MARKETPLACE_ROOT}/.codebuddy-connector/connectors.json}"
@@ -140,8 +141,8 @@ grep -q '"authUrlDomain"[[:space:]]*:[[:space:]]*"api.textin.com"' \
 grep -q '"XPARSE_BASE_URL"[[:space:]]*:[[:space:]]*"https://api.textin.com"' \
   "${STAGE_DIR}/cli.json" ||
   fail "下载的 CLI 配置没有强制使用 TextIn 正式 API。"
-grep -q "/${VERSION}/install.sh" "${STAGE_DIR}/cli.json" ||
-  fail "下载的 CLI 配置没有固定到 ${VERSION}。"
+grep -q "/${CLI_VERSION}/install.sh" "${STAGE_DIR}/cli.json" ||
+  fail "下载的 CLI 配置没有固定到 ${CLI_VERSION}。"
 if grep -q 'textin-api-pre\.intsig\.com\|/latest/' "${STAGE_DIR}/cli.json"; then
   fail "正式 Connector 配置包含 pre 或 latest 引用。"
 fi

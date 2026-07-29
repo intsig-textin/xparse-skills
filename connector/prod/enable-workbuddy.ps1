@@ -1,6 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $Version = if ($env:XPARSER_VERSION) { $env:XPARSER_VERSION } else { "v2.1.0-1" }
+$CLIVersion = if ($env:XPARSE_CLI_VERSION) { $env:XPARSE_CLI_VERSION } else { "v2.1.0" }
 $DownloadBase = if ($env:XPARSER_DOWNLOAD_BASE) {
     $env:XPARSER_DOWNLOAD_BASE
 } else {
@@ -158,8 +159,8 @@ try {
     if ($ProdCLI.env.XPARSE_BASE_URL -ne "https://api.textin.com") {
         throw "下载的 CLI 配置没有强制使用 TextIn 正式 API。"
     }
-    if (-not $ProdCLI.init.darwin.Contains("/${Version}/install.sh")) {
-        throw "下载的 CLI 配置没有固定到 ${Version}。"
+    if (-not $ProdCLI.init.darwin.Contains("/${CLIVersion}/install.sh")) {
+        throw "下载的 CLI 配置没有固定到 ${CLIVersion}。"
     }
     if (
         $ProdCLIText.Contains("textin-api-pre.intsig.com") -or
