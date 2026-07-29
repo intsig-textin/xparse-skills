@@ -263,7 +263,9 @@ func runAuthStatus(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return generalErr("failed to resolve AppKey configuration", "")
 	}
-	selection, selectionErr := selectParseAuthentication(cmd, APIModeAuto, "", appKey, cfg)
+	// Status checks whether an explicit paid request can authenticate. Default
+	// parse routing is intentionally free and must not hide stored credentials.
+	selection, selectionErr := selectParseAuthentication(cmd, APIModePaid, "", appKey, cfg)
 	loggedIn := selectionErr == nil && !selection.IsFree
 	method := ""
 	if loggedIn {

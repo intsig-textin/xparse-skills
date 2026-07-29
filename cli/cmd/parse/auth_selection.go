@@ -24,13 +24,14 @@ type parseAuthSelection struct {
 }
 
 func selectParseAuthentication(cmd *cobra.Command, apiMode APIMode, methodFlag string, appKey *config.CredentialSource, cfg *config.Config) (parseAuthSelection, error) {
-	if apiMode == APIModeFree {
+	if apiMode != APIModePaid {
 		if normalizeAuthMethod(methodFlag) != "" {
-			return parseAuthSelection{}, usageErr("--api free cannot be combined with --auth-method",
-				"[fix] remove --auth-method or use --api paid")
+			return parseAuthSelection{}, usageErr("free API mode cannot be combined with --auth-method",
+				"[fix] remove --auth-method or explicitly use --api paid")
 		}
-		// A stored or environment default must never make an explicitly free
-		// request paid.
+		// Free is the default. The legacy auto mode remains accepted as a
+		// compatibility alias, but stored credentials must never make either
+		// mode paid.
 		return parseAuthSelection{IsFree: true}, nil
 	}
 	method, source, err := configuredAuthMethod(methodFlag, cfg)
@@ -56,18 +57,16 @@ func selectParseAuthentication(cmd *cobra.Command, apiMode APIMode, methodFlag s
 		return parseAuthSelection{Method: method, Source: source}, nil
 	}
 
-	// Legacy auto selection remains AppKey-first when no method is configured.
+	// Paid requests keep the legacy AppKey-first selection when no method is
+	// configured.
 	if appKey.AppID != "" && appKey.SecretCode != "" {
 		return parseAuthSelection{Method: authMethodAppKey, Source: "auto"}, nil
 	}
 	if hasOAuthSession(oauthNow()) {
 		return parseAuthSelection{Method: authMethodOAuth, Source: "auto"}, nil
 	}
-	if apiMode == APIModePaid {
-		return parseAuthSelection{}, usageErr(exitcode.ErrPaidNoCreds,
-			"[ask human] run xparse-cli auth app-key, auth device, or auth browser")
-	}
-	return parseAuthSelection{IsFree: true}, nil
+	return parseAuthSelection{}, usageErr(exitcode.ErrPaidNoCreds,
+		"[ask human] run xparse-cli auth app-key, auth device, or auth browser")
 }
 
 func configuredAuthMethod(flagValue string, cfg *config.Config) (authMethod, string, error) {

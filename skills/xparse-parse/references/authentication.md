@@ -123,7 +123,9 @@ warning and does not prevent local logout. Logout does not delete remembered
 consent; use the next browser login with `--prompt=consent` when a fresh
 confirmation is required.
 
-When both AppKey and OAuth exist, old configuration files remain AppKey-first.
-An explicit successful login records that method as the default, and
-`--auth-method` temporarily overrides it. With no usable credentials, parsing
-continues through the free endpoint. `--api free` always forces the free path.
+Omitting `--api` and using `--api auto` or `--api free` always selects the
+anonymous free endpoint, whether credentials exist or not. A successful login
+records the preferred authentication method only for an explicit
+`--api paid` request. In paid mode, old configuration files remain AppKey-first
+when both AppKey and OAuth exist, and `--auth-method` temporarily overrides
+that paid-mode preference.

@@ -165,6 +165,7 @@ xparse-cli --profile workbuddy parse report.pdf --api paid --auth-method oauth
 | `xparse-cli auth status` | 只读查看登录状态 |
 | `xparse-cli auth logout` | 删除指定认证方式的本地凭证 |
 | `xparse-cli config` | 管理配置（show / set / reset / path） |
+| `xparse-cli quota` | 查看免费 API 额度 |
 | `xparse-cli download` | 下载解析结果中 elements 的图片 |
 | `xparse-cli update` | 自更新 CLI 到最新版本 |
 | `xparse-cli version` | 显示版本信息 |
@@ -176,7 +177,7 @@ xparse-cli --profile workbuddy parse report.pdf --api paid --auth-method oauth
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `--view` | `markdown` | 输出视图：`markdown`、`json` |
-| `--api` | `auto` | API 模式：`auto`、`free`、`paid` |
+| `--api` | `free` | API 模式：`free`、`paid`；`auto` 是 `free` 的兼容别名 |
 | `--auth-method` | _(自动)_ | paid API 认证：`app-key`、`oauth` |
 | `--page-range` | | 页码范围：`"1-5"` 或 `"1-2,5-10"` |
 | `--password` | | 加密文档密码 |
@@ -296,12 +297,14 @@ OAuth 参数优先级：
 | Browser redirect | `--redirect-uri` > `XPARSE_OAUTH_REDIRECT_URI` > `oauth.redirect_uri` > `http://127.0.0.1:0/callback` |
 | Base URL | `--base-url` > `XPARSE_BASE_URL` > `base_url` > `https://api.textin.com` |
 
-`--api auto` 未显式指定认证方式时保持旧版 AppKey 优先；没有 AppKey 时才选择有效
-OAuth 会话，二者都没有时使用 free API。显式选择的 OAuth 或 AppKey 失败时不会切换
-到另一种凭证。
+不传 `--api` 时始终使用匿名 free API；`--api auto` 仅作为兼容别名保留，行为同样
+固定为 free。已有 AppKey、OAuth 登录态或上次选择的认证方式都不会改变默认路由。
+只有显式传入 `--api paid` 才会读取付费凭证；未同时指定 `--auth-method` 时，付费模式
+保持 AppKey 优先，没有完整 AppKey 时再选择有效 OAuth 会话。显式选择的 OAuth 或
+AppKey 失败时不会切换到另一种凭证。
 
-成功执行 `auth app-key` 或 OAuth 登录会记录用户最后明确选择的认证方式；旧配置没有
-该字段时仍保持 AppKey 优先。`--api free` 始终强制匿名免费接口。
+成功执行 `auth app-key` 或 OAuth 登录仍会记录用户最后明确选择的认证方式，但该设置
+仅供显式 `--api paid` 使用。`--api free` 与 `--api auto` 都不会发送认证头。
 
 ## 退出码与错误处理
 

@@ -199,6 +199,7 @@ func TestDeviceJSONLInitialAuthorizationFailures(t *testing.T) {
 func TestDeviceJSONLAndParseAuthenticationModes(t *testing.T) {
 	var mu sync.Mutex
 	var parseHeaders []http.Header
+	var parsePaths []string
 	devicePolls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
@@ -236,6 +237,7 @@ func TestDeviceJSONLAndParseAuthenticationModes(t *testing.T) {
 		case paidParseAPIPath, freeParseAPIPath:
 			mu.Lock()
 			parseHeaders = append(parseHeaders, request.Header.Clone())
+			parsePaths = append(parsePaths, request.URL.Path)
 			mu.Unlock()
 			writeJSON(t, writer, map[string]any{
 				"code":    200,
@@ -322,11 +324,23 @@ func TestDeviceJSONLAndParseAuthenticationModes(t *testing.T) {
 	if freeParse.err != nil {
 		t.Fatalf("free parse failed: %v\nstdout:%s\nstderr:%s", freeParse.err, freeParse.stdout, freeParse.stderr)
 	}
+	defaultParse := runCLIHelperEnv(t, home,
+		"parse --view json "+sample,
+		"", appKeyEnvironment)
+	if defaultParse.err != nil {
+		t.Fatalf("default parse failed: %v\nstdout:%s\nstderr:%s", defaultParse.err, defaultParse.stdout, defaultParse.stderr)
+	}
+	autoParse := runCLIHelperEnv(t, home,
+		"parse --api auto --view json "+sample,
+		"", appKeyEnvironment)
+	if autoParse.err != nil {
+		t.Fatalf("auto parse failed: %v\nstdout:%s\nstderr:%s", autoParse.err, autoParse.stdout, autoParse.stderr)
+	}
 
 	mu.Lock()
 	defer mu.Unlock()
-	if len(parseHeaders) != 3 {
-		t.Fatalf("parse requests = %d, want 3", len(parseHeaders))
+	if len(parseHeaders) != 5 {
+		t.Fatalf("parse requests = %d, want 5", len(parseHeaders))
 	}
 	if got := parseHeaders[0].Get("Authorization"); got != "Bearer private-access-token-must-not-leak" {
 		t.Fatalf("OAuth Authorization = %q", got)
@@ -339,10 +353,21 @@ func TestDeviceJSONLAndParseAuthenticationModes(t *testing.T) {
 		parseHeaders[1].Get("x-ti-secret-code") != "fixture-secret-code" {
 		t.Fatalf("AppKey headers = %v", parseHeaders[1])
 	}
-	if parseHeaders[2].Get("Authorization") != "" ||
-		parseHeaders[2].Get("x-ti-app-id") != "" ||
-		parseHeaders[2].Get("x-ti-secret-code") != "" {
-		t.Fatalf("free request has authentication: %v", parseHeaders[2])
+	for index, label := range []string{"explicit free", "default", "auto"} {
+		header := parseHeaders[index+2]
+		if header.Get("Authorization") != "" ||
+			header.Get("x-ti-app-id") != "" ||
+			header.Get("x-ti-secret-code") != "" {
+			t.Fatalf("%s request has authentication: %v", label, header)
+		}
+		if got := parsePaths[index+2]; got != freeParseAPIPath {
+			t.Fatalf("%s path = %q, want %q", label, got, freeParseAPIPath)
+		}
+	}
+	for index, want := range []string{paidParseAPIPath, paidParseAPIPath} {
+		if got := parsePaths[index]; got != want {
+			t.Fatalf("paid path[%d] = %q, want %q", index, got, want)
+		}
 	}
 }
 
