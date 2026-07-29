@@ -26,8 +26,16 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DIST_DIR="${SCRIPT_DIR}/dist"
 CONNECTOR_DIR="${SCRIPT_DIR}/../connector"
 CONNECTOR_TEST_DIR="${CONNECTOR_DIR}/test"
+SKILLS_DIR="${SCRIPT_DIR}/../skills"
 BASE_PATH="xparse-cli/${VERSION}"
 UPLOAD_SCRIPT="${SCRIPT_DIR}/upload.sh"
+SKILL_ARCHIVE="${DIST_DIR}/workbuddy-xparse-parse.zip"
+SKILL_ARCHIVE_TMP="${DIST_DIR}/.workbuddy-xparse-parse.$$.zip"
+
+cleanup() {
+  rm -f "${SKILL_ARCHIVE_TMP}"
+}
+trap cleanup EXIT
 
 BINARY_FILES=(
   "xparse-cli-darwin-amd64"
@@ -49,10 +57,21 @@ REQUIRED_FILES=(
   "${CONNECTOR_TEST_DIR}/restore-workbuddy-production.sh"
   "${CONNECTOR_TEST_DIR}/enable-workbuddy-test.ps1"
   "${CONNECTOR_TEST_DIR}/restore-workbuddy-production.ps1"
+  "${SKILLS_DIR}/xparse-parse/SKILL.md"
 )
 for file in "${BINARY_FILES[@]}"; do
   REQUIRED_FILES+=("${DIST_DIR}/${file}")
 done
+
+if ! command -v zip >/dev/null 2>&1; then
+  echo "Missing release dependency: zip"
+  exit 1
+fi
+(
+  cd "${SKILLS_DIR}"
+  zip -qr "${SKILL_ARCHIVE_TMP}" xparse-parse
+)
+mv -f "${SKILL_ARCHIVE_TMP}" "${SKILL_ARCHIVE}"
 for file in "${REQUIRED_FILES[@]}"; do
   if [ ! -f "$file" ]; then
     echo "Missing release artifact: $file"
@@ -64,29 +83,34 @@ done
 upload() {
   local source_file="$1"
   local destination="$2"
+  local content_type="${3:-}"
   if [ "${DRY_RUN:-0}" = "1" ]; then
-    echo "[DRY RUN] ${source_file} -> ${destination}"
+    echo "[DRY RUN] ${source_file} -> ${destination} (${content_type:-default})"
     return
   fi
-  /bin/bash "$UPLOAD_SCRIPT" "$source_file" "$destination"
+  /bin/bash "$UPLOAD_SCRIPT" "$source_file" "$destination" "$content_type"
 }
 
-upload "${SCRIPT_DIR}/install/install.sh" "${BASE_PATH}/install.sh"
-upload "${SCRIPT_DIR}/install/install.ps1" "${BASE_PATH}/install.ps1"
-upload "${CONNECTOR_DIR}/cli.test.json" "${BASE_PATH}/workbuddy-cli.json"
+upload "${SCRIPT_DIR}/install/install.sh" "${BASE_PATH}/install.sh" \
+  "text/plain; charset=utf-8"
+upload "${SCRIPT_DIR}/install/install.ps1" "${BASE_PATH}/install.ps1" \
+  "text/plain; charset=utf-8"
+upload "${CONNECTOR_DIR}/cli.test.json" "${BASE_PATH}/workbuddy-cli.json" \
+  "application/json; charset=utf-8"
 upload "${CONNECTOR_DIR}/connector-meta.json" \
-  "${BASE_PATH}/workbuddy-connector-meta.json"
+  "${BASE_PATH}/workbuddy-connector-meta.json" "application/json; charset=utf-8"
 upload "${CONNECTOR_DIR}/icon.png" "${BASE_PATH}/workbuddy-icon.png"
 upload "${CONNECTOR_DIR}/marketplace-entry.json" \
-  "${BASE_PATH}/workbuddy-marketplace-entry.json"
+  "${BASE_PATH}/workbuddy-marketplace-entry.json" "application/json; charset=utf-8"
+upload "${SKILL_ARCHIVE}" "${BASE_PATH}/workbuddy-xparse-parse.zip"
 upload "${CONNECTOR_TEST_DIR}/enable-workbuddy-test.sh" \
-  "${BASE_PATH}/enable-workbuddy-test.sh"
+  "${BASE_PATH}/enable-workbuddy-test.sh" "text/plain; charset=utf-8"
 upload "${CONNECTOR_TEST_DIR}/restore-workbuddy-production.sh" \
-  "${BASE_PATH}/restore-workbuddy-production.sh"
+  "${BASE_PATH}/restore-workbuddy-production.sh" "text/plain; charset=utf-8"
 upload "${CONNECTOR_TEST_DIR}/enable-workbuddy-test.ps1" \
-  "${BASE_PATH}/enable-workbuddy-test.ps1"
+  "${BASE_PATH}/enable-workbuddy-test.ps1" "text/plain; charset=utf-8"
 upload "${CONNECTOR_TEST_DIR}/restore-workbuddy-production.ps1" \
-  "${BASE_PATH}/restore-workbuddy-production.ps1"
+  "${BASE_PATH}/restore-workbuddy-production.ps1" "text/plain; charset=utf-8"
 for file in "${BINARY_FILES[@]}"; do
   upload "${DIST_DIR}/${file}" "${BASE_PATH}/${file}"
 done

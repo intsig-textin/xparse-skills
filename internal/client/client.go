@@ -34,7 +34,7 @@ const (
 type APIMode string
 
 const (
-	APIModeAuto APIMode = "auto" // auto: paid if a supported credential exists, else free
+	APIModeAuto APIMode = "auto" // compatibility alias for free
 	APIModeFree APIMode = "free"
 	APIModePaid APIMode = "paid"
 )
@@ -216,16 +216,14 @@ type Summary struct {
 
 // ── Client construction ──
 
-// ResolveAPIMode determines whether to use free or paid API.
+// ResolveAPIMode determines whether to use free or paid API. Paid access must
+// always be explicitly requested; stored credentials never change the default.
 func ResolveAPIMode(mode APIMode, cred *config.CredentialSource) (isFree bool) {
-	switch mode {
-	case APIModeFree:
-		return true
-	case APIModePaid:
+	_ = cred // Kept in the signature for compatibility with existing callers.
+	if mode == APIModePaid {
 		return false
-	default:
-		return cred.AppID == "" || cred.SecretCode == ""
 	}
+	return true
 }
 
 // NewClient creates a client configured for free or paid API.
@@ -269,7 +267,8 @@ func NewClientWithBearer(cmd *cobra.Command, cred *config.CredentialSource, bear
 	}
 }
 
-// NewAutoClient creates a client with automatic free/paid detection.
+// NewAutoClient creates a default-free client. The name is retained for source
+// compatibility; callers must use NewClient explicitly for paid requests.
 func NewAutoClient(cmd *cobra.Command, cred *config.CredentialSource, httpClient *http.Client) *Client {
 	isFree := ResolveAPIMode(APIModeAuto, cred)
 	return NewClient(cmd, cred, isFree, httpClient)

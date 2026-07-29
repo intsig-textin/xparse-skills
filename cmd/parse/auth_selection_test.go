@@ -51,10 +51,10 @@ func TestAPIAuthMethodMatrix(t *testing.T) {
 		{name: "paid explicit oauth", api: APIModePaid, method: "oauth", appKey: completeAppKey, wantMethod: authMethodOAuth},
 		{name: "paid legacy appkey first", api: APIModePaid, appKey: completeAppKey, wantMethod: authMethodAppKey},
 		{name: "paid oauth when no appkey", api: APIModePaid, appKey: noAppKey, wantMethod: authMethodOAuth},
-		{name: "auto explicit oauth", api: APIModeAuto, method: "oauth", appKey: completeAppKey, wantMethod: authMethodOAuth},
-		{name: "auto both credentials appkey first", api: APIModeAuto, appKey: completeAppKey, wantMethod: authMethodAppKey},
-		{name: "auto oauth only", api: APIModeAuto, appKey: noAppKey, wantMethod: authMethodOAuth},
-		{name: "config method is explicit selection", api: APIModeAuto, appKey: completeAppKey, cfgMethod: "oauth", wantMethod: authMethodOAuth},
+		{name: "auto rejects explicit oauth", api: APIModeAuto, method: "oauth", appKey: completeAppKey, wantErr: true},
+		{name: "auto ignores both credentials", api: APIModeAuto, appKey: completeAppKey, wantFree: true},
+		{name: "auto ignores oauth only", api: APIModeAuto, appKey: noAppKey, wantFree: true},
+		{name: "auto ignores configured method", api: APIModeAuto, appKey: completeAppKey, cfgMethod: "oauth", wantFree: true},
 		{name: "oauth rejects appkey flags", api: APIModePaid, method: "oauth", appKey: completeAppKey, changeApp: true, wantErr: true},
 	}
 	for _, test := range tests {
