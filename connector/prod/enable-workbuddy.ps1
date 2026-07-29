@@ -38,6 +38,11 @@ $ActiveSkillsDir = if ($env:WORKBUDDY_CONNECTOR_SKILLS_DIR) {
 } else {
     Join-Path $UserHome ".workbuddy\connectors\skills\connector-textin-xparse"
 }
+$CLIPath = if ($env:XPARSE_CLI_PATH) {
+    $env:XPARSE_CLI_PATH
+} else {
+    Join-Path $UserHome ".xparse-cli\bin\xparse-cli.exe"
+}
 $StageDir = Join-Path $ConnectorsDir ".textin-xparse.prod-download.$PID"
 $CatalogDownload = "${CatalogFile}.textin-xparse-prod.download.${PID}"
 $EntryDownload = "${CatalogFile}.textin-xparse-entry.download.${PID}"
@@ -119,6 +124,7 @@ $ConnectorInstalled = $false
 $IconInstalled = $false
 $ActiveSkillsInstalled = $false
 $CatalogInstalled = $false
+$ProfileConfigured = $false
 $Succeeded = $false
 
 try {
@@ -148,6 +154,9 @@ try {
     }
     if ($ProdCLI.authUrlDomain -ne "api.textin.com") {
         throw "下载的 CLI 配置没有指向 TextIn 正式环境。"
+    }
+    if ($ProdCLI.env.XPARSE_BASE_URL -ne "https://api.textin.com") {
+        throw "下载的 CLI 配置没有强制使用 TextIn 正式 API。"
     }
     if (-not $ProdCLI.init.darwin.Contains("/${Version}/install.sh")) {
         throw "下载的 CLI 配置没有固定到 ${Version}。"
@@ -216,6 +225,14 @@ try {
 
     Move-Item -LiteralPath $CatalogDownload -Destination $CatalogFile -Force
     $CatalogInstalled = $true
+
+    if (Test-Path -LiteralPath $CLIPath -PathType Leaf) {
+        & $CLIPath --profile workbuddy config set base_url https://api.textin.com
+        if ($LASTEXITCODE -ne 0) {
+            throw "无法把现有 WorkBuddy CLI profile 切换到 TextIn 正式环境。"
+        }
+        $ProfileConfigured = $true
+    }
     $Succeeded = $true
 } catch {
     if ($CatalogInstalled -and (Test-Path -LiteralPath $OldCatalog -PathType Leaf)) {
@@ -253,6 +270,10 @@ try {
 }
 
 Write-Host "已安装 TextIn xParse 正式 Connector（${Version}）。"
-Write-Host "CLI 与 WorkBuddy profile 将在连接时按正式配置安装或复用，不会被本脚本清理。"
+if ($ProfileConfigured) {
+    Write-Host "已将现有 WorkBuddy CLI profile 切换到 TextIn 正式环境，登录凭证保持不变。"
+} else {
+    Write-Host "尚未检测到 CLI；WorkBuddy 首次连接安装 CLI 后会自动写入正式环境配置。"
+}
 Write-Host ""
 Write-Host "请完全退出并重新打开 WorkBuddy，然后在“TextIn xParse·智能文档解析”中点击“连接”。"

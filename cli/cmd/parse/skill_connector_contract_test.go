@@ -240,6 +240,11 @@ func TestWorkBuddyProdConnectorIsPinnedAndProductionOnly(t *testing.T) {
 			t.Fatalf("platform %q production init references a non-production target: %q",
 				platform, initCommand)
 		}
+		if !strings.Contains(initCommand,
+			"--profile workbuddy config set base_url https://api.textin.com") {
+			t.Fatalf("platform %q production init does not repair the WorkBuddy profile: %q",
+				platform, initCommand)
+		}
 	}
 	if contract.AuthURLDomain != "api.textin.com" {
 		t.Fatalf("production authUrlDomain = %q", contract.AuthURLDomain)
@@ -248,16 +253,22 @@ func TestWorkBuddyProdConnectorIsPinnedAndProductionOnly(t *testing.T) {
 		t.Fatalf("production Connector public client ID = %q",
 			contract.Env["XPARSE_OAUTH_CLIENT_ID"])
 	}
+	if contract.Env["XPARSE_BASE_URL"] != "https://api.textin.com" {
+		t.Fatalf("production Connector API override = %q",
+			contract.Env["XPARSE_BASE_URL"])
+	}
 }
 
-func TestWorkBuddyMacOSProdInstallerIsIdempotentAndKeepsCredentials(t *testing.T) {
+func TestWorkBuddyMacOSProdInstallerRepairsPreProfileAndKeepsCredentials(t *testing.T) {
 	tempDir := t.TempDir()
 	marketplaceRoot := filepath.Join(tempDir, "marketplace")
 	catalogDir := filepath.Join(marketplaceRoot, ".codebuddy-connector")
 	connectorDir := filepath.Join(marketplaceRoot, "connectors", "textin-xparse")
 	marketplaceIcon := filepath.Join(marketplaceRoot, "icons", "textin-xparse.png")
 	activeSkillsDir := filepath.Join(tempDir, "active-skills", "connector-textin-xparse")
-	profilePath := filepath.Join(tempDir, ".xparse-cli", "profiles", "workbuddy", "oauth-token.json")
+	profileDir := filepath.Join(tempDir, ".xparse-cli", "profiles", "workbuddy")
+	profileConfigPath := filepath.Join(profileDir, "config.yaml")
+	profileTokenPath := filepath.Join(profileDir, "oauth-token.json")
 	cliPath := filepath.Join(tempDir, ".local", "bin", "xparse-cli")
 	assetDir := filepath.Join(tempDir, "assets")
 	for _, dir := range []string{
@@ -265,7 +276,7 @@ func TestWorkBuddyMacOSProdInstallerIsIdempotentAndKeepsCredentials(t *testing.T
 		connectorDir,
 		filepath.Dir(marketplaceIcon),
 		filepath.Join(activeSkillsDir, "legacy"),
-		filepath.Dir(profilePath),
+		profileDir,
 		filepath.Dir(cliPath),
 		assetDir,
 	} {
@@ -303,10 +314,27 @@ func TestWorkBuddyMacOSProdInstallerIsIdempotentAndKeepsCredentials(t *testing.T
 		t.Fatal(err)
 	}
 	productionToken := []byte(`{"access_token":"keep-me"}`)
-	if err := os.WriteFile(profilePath, productionToken, 0o600); err != nil {
+	if err := os.WriteFile(profileTokenPath, productionToken, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	productionCLI := []byte("keep-cli")
+	if err := os.WriteFile(
+		profileConfigPath,
+		[]byte("base_url: https://textin-api-pre.intsig.com\n"),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+	productionCLI := []byte(`#!/bin/sh
+set -eu
+test "$1" = "--profile"
+test "$2" = "workbuddy"
+test "$3" = "config"
+test "$4" = "set"
+test "$5" = "base_url"
+test "$6" = "https://api.textin.com"
+mkdir -p "${HOME}/.xparse-cli/profiles/workbuddy"
+printf 'base_url: https://api.textin.com\n' > "${HOME}/.xparse-cli/profiles/workbuddy/config.yaml"
+`)
 	if err := os.WriteFile(cliPath, productionCLI, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -319,12 +347,16 @@ func TestWorkBuddyMacOSProdInstallerIsIdempotentAndKeepsCredentials(t *testing.T
 			`"authUrlDomain": "api.textin.com"`)
 		assertFileContains(t, filepath.Join(connectorDir, "cli.json"),
 			`"XPARSE_OAUTH_CLIENT_ID": "cli_textin_xparse_workbuddy"`)
+		assertFileContains(t, filepath.Join(connectorDir, "cli.json"),
+			`"XPARSE_BASE_URL": "https://api.textin.com"`)
 		assertFileContains(t, filepath.Join(connectorDir, "skills", "xparse-parse", "SKILL.md"),
 			"name: xparse-parse")
 		assertFileContains(t, filepath.Join(activeSkillsDir, "xparse-parse", "SKILL.md"),
 			"name: xparse-parse")
 		assertFileContent(t, marketplaceIcon, readRepositoryFile(t, "connector", "icon.png"))
-		assertFileContent(t, profilePath, productionToken)
+		assertFileContent(t, profileConfigPath,
+			[]byte("base_url: https://api.textin.com\n"))
+		assertFileContent(t, profileTokenPath, productionToken)
 		assertFileContent(t, cliPath, productionCLI)
 		if _, err := os.Stat(filepath.Join(connectorDir, "skills", "xparse-doc-tools")); !os.IsNotExist(err) {
 			t.Fatalf("production Connector unexpectedly includes xparse-doc-tools: %v", err)
@@ -349,6 +381,8 @@ func TestWorkBuddyProdDistributionArtifacts(t *testing.T) {
 			"v2.1.0",
 			"api.textin.com",
 			"cli_textin_xparse_workbuddy",
+			"XPARSE_BASE_URL",
+			"config set base_url",
 			"workbuddy-xparse-parse.zip",
 			"xparse-parse",
 		} {

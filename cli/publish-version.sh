@@ -140,6 +140,12 @@ if [ "$RELEASE_KIND" = "prod" ]; then
       echo "Production Connector config does not use the WorkBuddy OAuth client."
       exit 1
     }
+  grep -Fq '"XPARSE_BASE_URL": "https://api.textin.com"' \
+    "${CONNECTOR_CONFIG}" ||
+    {
+      echo "Production Connector config does not force the production API."
+      exit 1
+    }
   if grep -Fq '/latest/' "${CONNECTOR_CONFIG}"; then
     echo "Production Connector config must not reference latest."
     exit 1

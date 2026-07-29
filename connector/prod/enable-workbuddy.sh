@@ -10,6 +10,7 @@ CONNECTOR_DIR="${WORKBUDDY_CONNECTOR_DIR:-${CONNECTORS_DIR}/textin-xparse}"
 MARKETPLACE_ICONS_DIR="${WORKBUDDY_MARKETPLACE_ICONS_DIR:-${MARKETPLACE_ROOT}/icons}"
 MARKETPLACE_ICON="${MARKETPLACE_ICONS_DIR}/textin-xparse.png"
 ACTIVE_SKILLS_DIR="${WORKBUDDY_CONNECTOR_SKILLS_DIR:-${HOME}/.workbuddy/connectors/skills/connector-textin-xparse}"
+CLI_PATH="${XPARSE_CLI_PATH:-${HOME}/.local/bin/xparse-cli}"
 STAGE_DIR="${CONNECTORS_DIR}/.textin-xparse.prod-download.$$"
 CATALOG_DOWNLOAD="${CATALOG_FILE}.textin-xparse-prod.download.$$"
 ENTRY_DOWNLOAD="${CATALOG_FILE}.textin-xparse-entry.download.$$"
@@ -24,6 +25,7 @@ CONNECTOR_INSTALLED=0
 ICON_INSTALLED=0
 ACTIVE_SKILLS_INSTALLED=0
 CATALOG_INSTALLED=0
+PROFILE_CONFIGURED=0
 
 fail() {
   printf '错误：%s\n' "$*" >&2
@@ -135,6 +137,9 @@ grep -q '"XPARSE_OAUTH_CLIENT_ID"[[:space:]]*:[[:space:]]*"cli_textin_xparse_wor
 grep -q '"authUrlDomain"[[:space:]]*:[[:space:]]*"api.textin.com"' \
   "${STAGE_DIR}/cli.json" ||
   fail "下载的 CLI 配置没有指向 TextIn 正式环境。"
+grep -q '"XPARSE_BASE_URL"[[:space:]]*:[[:space:]]*"https://api.textin.com"' \
+  "${STAGE_DIR}/cli.json" ||
+  fail "下载的 CLI 配置没有强制使用 TextIn 正式 API。"
 grep -q "/${VERSION}/install.sh" "${STAGE_DIR}/cli.json" ||
   fail "下载的 CLI 配置没有固定到 ${VERSION}。"
 if grep -q 'textin-api-pre\.intsig\.com\|/latest/' "${STAGE_DIR}/cli.json"; then
@@ -226,8 +231,18 @@ ACTIVE_SKILLS_INSTALLED=1
 
 mv "${CATALOG_DOWNLOAD}" "${CATALOG_FILE}"
 CATALOG_INSTALLED=1
+
+if [ -x "${CLI_PATH}" ]; then
+  "${CLI_PATH}" --profile workbuddy config set base_url https://api.textin.com ||
+    fail "无法把现有 WorkBuddy CLI profile 切换到 TextIn 正式环境。"
+  PROFILE_CONFIGURED=1
+fi
 SUCCESS=1
 
 printf '已安装 TextIn xParse 正式 Connector（%s）。\n' "${VERSION}"
-printf 'CLI 与 WorkBuddy profile 将在连接时按正式配置安装或复用，不会被本脚本清理。\n'
+if [ "${PROFILE_CONFIGURED}" -eq 1 ]; then
+  printf '已将现有 WorkBuddy CLI profile 切换到 TextIn 正式环境，登录凭证保持不变。\n'
+else
+  printf '尚未检测到 CLI；WorkBuddy 首次连接安装 CLI 后会自动写入正式环境配置。\n'
+fi
 printf '\n请完全退出并重新打开 WorkBuddy，然后在“TextIn xParse·智能文档解析”中点击“连接”。\n'

@@ -16,6 +16,8 @@
 - CLI 版本固定为 `v2.1.0`，不引用 `latest`。
 - OAuth 域名固定为 `api.textin.com`。
 - OAuth client 固定为 `cli_textin_xparse_workbuddy`。
+- Connector 强制设置 `XPARSE_BASE_URL=https://api.textin.com`，安装时也会把
+  `workbuddy` profile 中遗留的 pre 地址切换为正式地址，不删除登录凭证。
 - CLI 默认使用免费解析，只有显式指定付费模式时才使用账号额度。
 - WorkBuddy 请求携带来源标识，登录与注册链路保留 `launch_from=workbuddy`。
 - 包内不包含 pre/test 配置、测试 marker 或 `xparse-doc-tools`。
