@@ -1,8 +1,8 @@
 {
   "init": {
-    "darwin": "curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.sh | sh",
-    "linux": "curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.sh | sh",
-    "win32": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"irm https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.ps1 | iex\""
+    "darwin": "curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/v2.1.0/install.sh | sh",
+    "linux": "curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/v2.1.0/install.sh | sh",
+    "win32": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"irm https://dllf.intsig.net/download/2026/Solution/xparse-cli/v2.1.0/install.ps1 | iex\""
   },
   "auth": {
     "darwin": "\"$HOME/.local/bin/xparse-cli\" --profile workbuddy auth device --open-browser=always --output=jsonl",
@@ -25,7 +25,7 @@
   },
   "authUrlDomain": "api.textin.com",
   "env": {
-    "XPARSE_OAUTH_CLIENT_ID": "cli_textin_xparse"
+    "XPARSE_OAUTH_CLIENT_ID": "cli_textin_xparse_workbuddy"
   },
   "versionCheck": {
     "command": {

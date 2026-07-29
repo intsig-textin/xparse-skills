@@ -90,7 +90,7 @@ func TestWorkBuddyConnectorCommandAndExtractionContract(t *testing.T) {
 	if contract.AuthURLDomain != "api.textin.com" {
 		t.Fatalf("authUrlDomain = %q", contract.AuthURLDomain)
 	}
-	if contract.Env["XPARSE_OAUTH_CLIENT_ID"] != "cli_textin_xparse" {
+	if contract.Env["XPARSE_OAUTH_CLIENT_ID"] != "cli_textin_xparse_workbuddy" {
 		t.Fatalf("Connector public client ID = %q", contract.Env["XPARSE_OAUTH_CLIENT_ID"])
 	}
 	if contract.Env["XPARSE_CONFIG_DIR"] != "" ||
@@ -220,6 +220,33 @@ func TestWorkBuddyPreConnectorIsPinnedAndPreOnly(t *testing.T) {
 	uploadScript := string(readRepositoryFile(t, "cli", "upload.sh"))
 	if !strings.Contains(uploadScript, "--content-type=${content_type}") {
 		t.Fatal("uploader does not forward the explicit UTF-8 content type to azcopy")
+	}
+}
+
+func TestWorkBuddyProdConnectorIsPinnedAndProductionOnly(t *testing.T) {
+	data := readRepositoryFile(t, "connector", "cli.json")
+	var contract connectorCLIContract
+	if err := json.Unmarshal(data, &contract); err != nil {
+		t.Fatal(err)
+	}
+	for _, platform := range []string{"darwin", "linux", "win32"} {
+		initCommand := contract.Init[platform]
+		if !strings.Contains(initCommand, "/v2.1.0/") {
+			t.Fatalf("platform %q production init is not pinned: %q",
+				platform, initCommand)
+		}
+		if strings.Contains(initCommand, "/latest/") ||
+			strings.Contains(initCommand, "textin-api-pre.intsig.com") {
+			t.Fatalf("platform %q production init references a non-production target: %q",
+				platform, initCommand)
+		}
+	}
+	if contract.AuthURLDomain != "api.textin.com" {
+		t.Fatalf("production authUrlDomain = %q", contract.AuthURLDomain)
+	}
+	if contract.Env["XPARSE_OAUTH_CLIENT_ID"] != "cli_textin_xparse_workbuddy" {
+		t.Fatalf("production Connector public client ID = %q",
+			contract.Env["XPARSE_OAUTH_CLIENT_ID"])
 	}
 }
 
