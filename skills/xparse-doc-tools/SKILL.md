@@ -7,6 +7,14 @@ compatibility: Requires the `xparse-cli` binary with tool primitive commands (ge
 
 # xparse-doc-tools
 
+## WorkBuddy command profile
+
+When this Skill is installed by the TextIn xParse WorkBuddy Connector, prefix
+every command in this document with `xparse-cli --profile workbuddy` instead of
+plain `xparse-cli`. Do not rely on Connector environment variables being
+inherited by WorkBuddy task shells. Outside WorkBuddy, use the commands as
+written.
+
 ## Routing Rules
 
 - Use `xparse-parse` instead if the user needs a full markdown dump of the entire document.

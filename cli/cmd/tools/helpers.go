@@ -22,7 +22,8 @@ func resolveCredentials(cmd *cobra.Command) (*config.CredentialSource, error) {
 	return credSrc, nil
 }
 
-// newClient creates an xparse API client with automatic free/paid detection.
+// newClient creates a default-free xparse API client. Primitive cache-reading
+// commands must not become paid merely because credentials are stored.
 func newClient(cmd *cobra.Command, credSrc *config.CredentialSource) *client.Client {
 	return client.NewAutoClient(cmd, credSrc, nil)
 }

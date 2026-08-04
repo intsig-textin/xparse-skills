@@ -2,13 +2,16 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/intsig-textin/xparse-skills/cli/cmd/tools"
+	"github.com/intsig-textin/xparse-skills/cli/internal/config"
 	"github.com/intsig-textin/xparse-skills/cli/internal/exitcode"
 )
 
@@ -16,6 +19,7 @@ var (
 	appIDFlag      string
 	secretCodeFlag string
 	baseURLFlag    string
+	profileFlag    string
 	verboseFlag    bool
 )
 
@@ -49,6 +53,12 @@ Supports: PDF, Images (png, jpg, bmp, tiff, webp), Doc(x), Ppt(x), Xls(x), HTML,
 For more information, visit https://www.textin.com`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if err := config.SetProfile(profileFlag); err != nil {
+			return usageErr(err.Error(), "[fix] use --profile workbuddy or omit --profile")
+		}
+		return nil
+	},
 }
 
 // boolStringFlags lists flags registered as StringVar with NoOptDefVal.
@@ -56,13 +66,13 @@ For more information, visit https://www.textin.com`,
 // to "--flag=true/false" before cobra parses args, because pflag's NoOptDefVal
 // prevents consuming the next token as the flag value.
 var boolStringFlags = map[string]bool{
-	"--include-hierarchy":      true,
-	"--include-inline-objects": true,
-	"--include-char-details":   true,
-	"--include-image-data":     true,
+	"--include-hierarchy":       true,
+	"--include-inline-objects":  true,
+	"--include-char-details":    true,
+	"--include-image-data":      true,
 	"--include-table-structure": true,
-	"--include-pages":          true,
-	"--include-title-tree":     true,
+	"--include-pages":           true,
+	"--include-title-tree":      true,
 }
 
 func normalizeArgs() {
@@ -85,7 +95,9 @@ func normalizeArgs() {
 
 func Execute() error {
 	normalizeArgs()
-	err := rootCmd.Execute()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	err := rootCmd.ExecuteContext(ctx)
 	if err == nil {
 		return nil
 	}
@@ -160,6 +172,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&appIDFlag, "app-id", "", "Textin App ID (overrides env and config)")
 	rootCmd.PersistentFlags().StringVar(&secretCodeFlag, "secret-code", "", "Textin Secret Code (overrides env and config)")
 	rootCmd.PersistentFlags().StringVar(&baseURLFlag, "base-url", "", "API base URL (for private deployments)")
+	rootCmd.PersistentFlags().StringVar(&profileFlag, "profile", "", "Credential profile: workbuddy")
 	rootCmd.PersistentFlags().BoolVar(&verboseFlag, "verbose", false, "Verbose mode, print HTTP details")
 
 	// Register document tool primitives

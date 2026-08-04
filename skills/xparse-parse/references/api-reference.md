@@ -22,12 +22,12 @@ xparse-cli parse <FILE> [options]
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `--include-hierarchy` | flag | on | Parent-child relationships and element associations |
-| `--include-inline-objects` | flag | off | Formulas, handwriting, checkboxes, embedded images |
+| `--include-inline-objects` | flag | on | Formulas, handwriting, checkboxes, embedded images |
 | `--include-char-details` | flag | off | Character-level coordinates and OCR confidence scores |
-| `--include-image-data` | flag | off | Image URLs and Base64 encoding |
-| `--include-table-structure` | flag | off | Structured table cell data with coordinates |
-| `--include-pages` | flag | off | Per-page metadata and preview images |
-| `--include-title-tree` | flag | off | Hierarchical document outline |
+| `--include-image-data` | flag | on | Image URLs and Base64 encoding |
+| `--include-table-structure` | flag | on | Structured table cell data with coordinates |
+| `--include-pages` | flag | on | Per-page metadata and preview images |
+| `--include-title-tree` | flag | on | Hierarchical document outline |
 
 ### Output Options
 
@@ -217,14 +217,14 @@ This section groups error codes by handling intent. It is meant for CLI and skil
 
 | Code | Meaning | Action |
 |------|---------|--------|
-| 40003 | Insufficient balance | Top up account or switch to free API if applicable |
+| 40003 | Insufficient balance | Purchase credits at the [TextIn xParse purchase page](https://www.textin.com/market/chager/pdf_to_markdown), or switch to the free API if applicable |
 
 #### Rate & Free-Tier Limits
 
 | Code | Meaning | Action |
 |------|---------|--------|
 | 40306 | Request rate limit exceeded | Retry later and reduce request frequency |
-| 40307 | Daily free quota exhausted | Stop and configure paid credentials, or wait for quota reset |
+| 40307 | Daily free quota exhausted | Stop; ask whether to wait or explicitly retry with `--api paid` |
 
 #### Request & Parameter Errors
 
@@ -240,7 +240,7 @@ This section groups error codes by handling intent. It is meant for CLI and skil
 | Code | Meaning | Action |
 |------|---------|--------|
 | 40301 | Unsupported image type | Use a supported image format |
-| 40302 | File exceeds size limit | Use smaller input, split pages, or switch to paid API |
+| 40302 | File exceeds size limit | Split pages, or after explicit user approval retry with `--api paid` |
 | 40303 | File format not supported | Use a supported document format |
 | 40305 | File missing or not uploaded | Verify file path or upload step |
 | 40425 | File format not supported by parse engine | Use a supported format |

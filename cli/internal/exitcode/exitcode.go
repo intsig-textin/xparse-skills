@@ -46,7 +46,7 @@ type APIErrorInfo struct {
 	XRequestID     string // from API response
 	Retryable      bool
 	Suggestion     string
-	ContactSupport bool   // true = user/agent cannot resolve; show request_id for Textin support
+	ContactSupport bool // true = user/agent cannot resolve; show request_id for Textin support
 }
 
 // suggestionMap maps Textin API error codes to agent-actionable suggestions.
@@ -58,7 +58,7 @@ var suggestionMap = map[int]struct {
 	400:   {false, "[ask human] provide a valid file — current file is empty (0 bytes)", false},
 	500:   {true, "[retry] max 2 retries, 2s backoff", true},
 	30203: {true, "[retry] max 2 retries, 2s backoff", true},
-	40003: {false, "[fallback] re-run with --api free; or [ask human] top up at textin.com", false},
+	40003: {false, "[fallback] re-run with --api free; or [ask human] top up at https://www.textin.com/market/chager/pdf_to_markdown", false},
 	40004: {false, "[fix] check all flags and values; run xparse-cli help parse", false},
 	40007: {false, "[ask human] check service configuration at textin.com", true},
 	40008: {false, "[ask human] activate service at textin.com", true},
