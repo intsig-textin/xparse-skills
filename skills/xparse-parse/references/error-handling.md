@@ -180,5 +180,5 @@ Parse failed?
 | Password required | `Document is password-protected. Rerun with: xparse-cli parse <FILE> --password <your_password>` |
 | Wrong password | `Password is incorrect. Try again with the correct password, or the document may use a different encryption.` |
 | Invalid credentials | `API credentials are invalid. Check your APP_ID and SECRET_CODE in [TextIn console](https://www.textin.com/console/dashboard/setting).` |
-| No balance | `Your paid account has insufficient balance. Top up credits at [TextIn console](https://www.textin.com/console/dashboard/setting).` |
+| No balance | `Your paid account has insufficient balance. Purchase credits at the [TextIn xParse purchase page](https://www.textin.com/market/chager/pdf_to_markdown).` |
 | Network timeout | `Service temporarily unavailable. Try again in a moment, or use --page-range to parse smaller sections.` |
