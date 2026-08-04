@@ -24,6 +24,9 @@ const (
 	APIModeAuto APIMode = client.APIModeAuto
 	APIModeFree APIMode = client.APIModeFree
 	APIModePaid APIMode = client.APIModePaid
+
+	paidParseAPIPath = client.PaidParseAPIPath
+	freeParseAPIPath = client.FreeParseAPIPath
 )
 
 // resolveAPIMode determines whether to use free or paid API.
@@ -32,10 +35,10 @@ func resolveAPIMode(mode APIMode, cred *config.CredentialSource) bool {
 }
 
 // newXParserClient creates a client configured for free or paid API.
-func newXParserClient(cmd *cobra.Command, cred *config.CredentialSource, isFree bool) *XParserClient {
+func newXParserClient(cmd *cobra.Command, cred *config.CredentialSource, bearerToken string, isFree bool) *XParserClient {
 	var httpClient *http.Client
 	if verboseFlag {
 		httpClient = newVerboseHTTPClient()
 	}
-	return client.NewClient(cmd, cred, isFree, httpClient)
+	return client.NewClientWithBearer(cmd, cred, bearerToken, isFree, httpClient)
 }

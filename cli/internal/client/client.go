@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -23,25 +24,30 @@ const (
 
 	FreeAPIBaseURL   = "https://api.textin.com"
 	FreeParseAPIPath = "/api/v1/agent/parse/sync"
+
+	clientFromEnv       = "XPARSE_CLIENT_FROM"
+	clientFromCLI       = "cli"
+	clientFromWorkBuddy = "workbuddy"
 )
 
 // APIMode represents free vs paid API selection.
 type APIMode string
 
 const (
-	APIModeAuto APIMode = "" // auto: paid if key exists, else free
+	APIModeAuto APIMode = "auto" // compatibility alias for free
 	APIModeFree APIMode = "free"
 	APIModePaid APIMode = "paid"
 )
 
 // Client wraps HTTP calls to the Textin xParser API.
 type Client struct {
-	AppID      string
-	SecretCode string
-	BaseURL    string
-	ParsePath  string
-	IsFreeAPI  bool
-	HTTPClient *http.Client
+	AppID       string
+	SecretCode  string
+	BearerToken string
+	BaseURL     string
+	ParsePath   string
+	IsFreeAPI   bool
+	HTTPClient  *http.Client
 }
 
 // ParseOptions holds parameters for an xparse API call.
@@ -210,27 +216,37 @@ type Summary struct {
 
 // ── Client construction ──
 
-// ResolveAPIMode determines whether to use free or paid API.
+// ResolveAPIMode determines whether to use free or paid API. Paid access must
+// always be explicitly requested; stored credentials never change the default.
 func ResolveAPIMode(mode APIMode, cred *config.CredentialSource) (isFree bool) {
-	switch mode {
-	case APIModeFree:
-		return true
-	case APIModePaid:
+	_ = cred // Kept in the signature for compatibility with existing callers.
+	if mode == APIModePaid {
 		return false
-	default:
-		return cred.AppID == "" || cred.SecretCode == ""
 	}
+	return true
 }
 
 // NewClient creates a client configured for free or paid API.
 // Pass a custom httpClient (e.g. verbose) or nil for default.
 func NewClient(cmd *cobra.Command, cred *config.CredentialSource, isFree bool, httpClient *http.Client) *Client {
+	return NewClientWithBearer(cmd, cred, "", isFree, httpClient)
+}
+
+// NewClientWithBearer creates a client that prefers OAuth Bearer
+// authentication over AppKey for paid API calls.
+func NewClientWithBearer(cmd *cobra.Command, cred *config.CredentialSource, bearerToken string, isFree bool, httpClient *http.Client) *Client {
 	cfg, _ := config.Load()
 
 	var baseURL, parsePath string
 	if isFree {
 		baseURL = FreeAPIBaseURL
 		parsePath = FreeParseAPIPath
+		if (cmd != nil && cmd.Flags().Changed("base-url")) ||
+			strings.TrimSpace(os.Getenv("XPARSE_BASE_URL")) != "" ||
+			(config.Profile() == config.ProfileWorkBuddy &&
+				cfg != nil && strings.TrimSpace(cfg.BaseURL) != "") {
+			baseURL = config.GetBaseURL(cmd, cfg)
+		}
 	} else {
 		baseURL = config.GetBaseURL(cmd, cfg)
 		parsePath = PaidParseAPIPath
@@ -241,16 +257,18 @@ func NewClient(cmd *cobra.Command, cred *config.CredentialSource, isFree bool, h
 	}
 
 	return &Client{
-		AppID:      cred.AppID,
-		SecretCode: cred.SecretCode,
-		BaseURL:    baseURL,
-		ParsePath:  parsePath,
-		IsFreeAPI:  isFree,
-		HTTPClient: httpClient,
+		AppID:       cred.AppID,
+		SecretCode:  cred.SecretCode,
+		BearerToken: bearerToken,
+		BaseURL:     baseURL,
+		ParsePath:   parsePath,
+		IsFreeAPI:   isFree,
+		HTTPClient:  httpClient,
 	}
 }
 
-// NewAutoClient creates a client with automatic free/paid detection.
+// NewAutoClient creates a default-free client. The name is retained for source
+// compatibility; callers must use NewClient explicitly for paid requests.
 func NewAutoClient(cmd *cobra.Command, cred *config.CredentialSource, httpClient *http.Client) *Client {
 	isFree := ResolveAPIMode(APIModeAuto, cred)
 	return NewClient(cmd, cred, isFree, httpClient)
@@ -316,10 +334,29 @@ func (c *Client) ParseURL(fileURL string, opts *ParseOptions) (*ParseResponse, e
 }
 
 func (c *Client) setAuthHeaders(req *http.Request) {
-	req.Header.Set("X-From", "cli")
-	if !c.IsFreeAPI && c.AppID != "" && c.SecretCode != "" {
+	req.Header.Set("X-From", resolveClientFrom(os.Getenv(clientFromEnv)))
+	if c.IsFreeAPI {
+		return
+	}
+	if c.BearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.BearerToken)
+		return
+	}
+	if c.AppID != "" && c.SecretCode != "" {
 		req.Header.Set("x-ti-app-id", c.AppID)
 		req.Header.Set("x-ti-secret-code", c.SecretCode)
+	}
+}
+
+func resolveClientFrom(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case clientFromWorkBuddy:
+		return clientFromWorkBuddy
+	default:
+		if config.Profile() == config.ProfileWorkBuddy {
+			return clientFromWorkBuddy
+		}
+		return clientFromCLI
 	}
 }
 

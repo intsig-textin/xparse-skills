@@ -12,7 +12,11 @@ if [ $# -lt 1 ]; then
 fi
 
 VERSION="$1"
-GO_BIN="${GO_BIN:-/usr/bin/go}"
+GO_BIN="${GO_BIN:-$(command -v go || true)}"
+if [ -z "$GO_BIN" ]; then
+  echo "go executable not found; set GO_BIN to its absolute path."
+  exit 1
+fi
 
 PKG="github.com/intsig-textin/xparse-skills/cli/cmd/parse"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -53,6 +57,16 @@ echo "Build complete: ${VERSION} (${COMMIT})"
 echo "Output: ${DIST_DIR}/"
 ls -lh "$DIST_DIR"/xparse-cli-*
 
-# Verify linux-amd64 binary
+# Verify the binary built for the current host.
 echo ""
-"${DIST_DIR}/xparse-cli-linux-amd64" version
+HOST_GOOS="$("$GO_BIN" env GOOS)"
+HOST_GOARCH="$("$GO_BIN" env GOARCH)"
+HOST_BINARY="${DIST_DIR}/xparse-cli-${HOST_GOOS}-${HOST_GOARCH}"
+if [ "$HOST_GOOS" = "windows" ]; then
+  HOST_BINARY="${HOST_BINARY}.exe"
+fi
+if [ -x "$HOST_BINARY" ]; then
+  "$HOST_BINARY" version
+else
+  echo "Skipping executable verification: no runnable ${HOST_GOOS}/${HOST_GOARCH} artifact."
+fi
