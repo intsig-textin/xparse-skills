@@ -887,6 +887,18 @@ func TestSkillUsesFormalCLIWithoutCredentialCollection(t *testing.T) {
 			t.Fatal("Skill error guidance does not require explicit paid approval")
 		}
 	}
+	const purchaseURL = "https://www.textin.com/market/chager/pdf_to_markdown"
+	for _, document := range []struct {
+		name    string
+		content string
+	}{
+		{name: "error handling", content: errorHandling},
+		{name: "API reference", content: apiReference},
+	} {
+		if !strings.Contains(document.content, purchaseURL) {
+			t.Fatalf("Skill %s does not direct insufficient-balance users to %s", document.name, purchaseURL)
+		}
+	}
 	for _, forbidden := range []string{
 		"Auto-select from the requested/available auth method",
 		"Rerun the same parse command",
