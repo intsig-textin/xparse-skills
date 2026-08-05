@@ -106,9 +106,15 @@ func TestXParserClientFromHeaderAcrossAuthModes(t *testing.T) {
 		wantValue  string
 	}{
 		{
-			name:       "free",
+			name:       "anonymous free",
 			client:     Client{IsFreeAPI: true},
 			wantHeader: "Authorization",
+		},
+		{
+			name:       "oauth free",
+			client:     Client{IsFreeAPI: true, BearerToken: "access-token"},
+			wantHeader: "Authorization",
+			wantValue:  "Bearer access-token",
 		},
 		{
 			name:       "oauth",

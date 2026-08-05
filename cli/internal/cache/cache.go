@@ -112,7 +112,7 @@ type CacheEntry struct {
 	DocID    string `json:"doc_id"`
 	Filepath string `json:"filepath"`
 	Filename string `json:"filename"`
-	Parsed bool   `json:"parsed"`
+	Parsed   bool   `json:"parsed"`
 }
 
 // ListAll lists all cached doc_info entries with their parse status.
@@ -140,7 +140,7 @@ func ListAll() ([]CacheEntry, error) {
 			DocID:    docID,
 			Filepath: info.Filepath,
 			Filename: info.Filename,
-			Parsed: Has(docID),
+			Parsed:   Has(docID),
 		})
 	}
 	return result, nil
@@ -152,11 +152,12 @@ func BaseDir() string {
 	return filepath.Join(home, ".xparse-cli")
 }
 
-// CleanAll removes all cached data (docinfo + parse cache).
+// CleanAll removes document data without deleting credentials or telemetry outbox files.
 func CleanAll() error {
-	dir := BaseDir()
-	if err := os.RemoveAll(dir); err != nil {
-		return fmt.Errorf("failed to clean cache: %w", err)
+	for _, dir := range []string{CacheDir(), docInfoDir()} {
+		if err := os.RemoveAll(dir); err != nil {
+			return fmt.Errorf("failed to clean cache: %w", err)
+		}
 	}
 	return nil
 }

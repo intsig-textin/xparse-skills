@@ -1,6 +1,21 @@
 $ErrorActionPreference = "Stop"
 
-$Version = if ($env:XPARSER_VERSION) { $env:XPARSER_VERSION } else { "v2.1.0-workbuddy-pre.1" }
+$Version = if ($env:XPARSER_VERSION) { $env:XPARSER_VERSION } else { "v2.2.0-workbuddy-test.3" }
+$ExpectedAuthDomain = if ($env:XPARSE_EXPECTED_AUTH_DOMAIN) {
+    $env:XPARSE_EXPECTED_AUTH_DOMAIN
+} else {
+    "textin-sandbox.intsig.com"
+}
+$ProfileBaseURL = if ($env:XPARSE_PROFILE_BASE_URL) {
+    $env:XPARSE_PROFILE_BASE_URL
+} else {
+    "https://textin-sandbox.intsig.com"
+}
+$EnvironmentLabel = if ($env:XPARSE_ENVIRONMENT_LABEL) {
+    $env:XPARSE_ENVIRONMENT_LABEL
+} else {
+    "test"
+}
 $DownloadBase = if ($env:XPARSER_DOWNLOAD_BASE) {
     $env:XPARSER_DOWNLOAD_BASE
 } else {
@@ -131,10 +146,10 @@ try {
     $TestMeta = Read-Utf8Json (Join-Path $StageDir "connector-meta.json")
     $TestEntry = Read-Utf8Json $EntryDownload
     if ($TestCLI.env.XPARSE_OAUTH_CLIENT_ID -ne "cli_textin_xparse_workbuddy") {
-        throw "下载的 CLI 配置不是预期的 WorkBuddy pre 配置。"
+        throw "下载的 CLI 配置不是预期的 WorkBuddy test 配置。"
     }
-    if ($TestCLI.authUrlDomain -ne "textin-api-pre.intsig.com") {
-        throw "下载的 CLI 配置没有指向 TextIn pre 环境。"
+    if ($TestCLI.authUrlDomain -ne $ExpectedAuthDomain) {
+        throw "下载的 CLI 配置没有指向 TextIn ${EnvironmentLabel} 环境。"
     }
     if ($TestMeta.source -ne "textin-xparse") {
         throw "下载的 Connector 元数据无效。"
@@ -143,7 +158,7 @@ try {
         throw "下载的 marketplace 注册项无效。"
     }
     if ((Read-Utf8Text (Join-Path $StageDir "cli.json")).Contains("/latest/")) {
-        throw "pre 配置不能引用 latest 目录。"
+        throw "test 配置不能引用 latest 目录。"
     }
     $IconSHA256 = (Get-FileHash -LiteralPath (Join-Path $StageDir "icon.png") `
         -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -155,7 +170,7 @@ try {
         throw "下载的 Connector Skill 不完整：缺少 xparse-parse/SKILL.md。"
     }
     if (Test-Path -LiteralPath (Join-Path $StageSkillsDir "xparse-doc-tools")) {
-        throw "pre Connector 只能包含 xparse-parse Skill。"
+        throw "test Connector 只能包含 xparse-parse Skill。"
     }
     [System.IO.File]::WriteAllText(
         (Join-Path $StageDir ".workbuddy-test"),
@@ -214,7 +229,7 @@ try {
         if (Test-Path -LiteralPath $ActiveRefresh -PathType Container) {
             Remove-Item -LiteralPath $ActiveRefresh -Recurse -Force
         }
-        Write-Host "WorkBuddy 已安装 TextIn xParse pre Connector，文件已刷新。"
+        Write-Host "WorkBuddy 已安装 TextIn xParse test Connector，文件已刷新。"
     } else {
         foreach ($Backup in @(
             $CatalogBackup,
@@ -269,13 +284,42 @@ try {
         }
         Copy-Item -LiteralPath (Join-Path $ConnectorDir "skills") `
             -Destination $ActiveSkillsDir -Recurse
-        Write-Host "已注入 TextIn xParse pre Connector，并备份执行前的 WorkBuddy 状态。"
+        Write-Host "已注入 TextIn xParse test Connector，并备份执行前的 WorkBuddy 状态。"
     }
 } finally {
     Clear-TestDownloads
 }
 
+$PreviousVersion = $env:XPARSER_VERSION
+$PreviousInstallDir = $env:INSTALL_DIR
+try {
+    $env:XPARSER_VERSION = $Version
+    $env:INSTALL_DIR = Split-Path -Parent $CLIPath
+    $InstallerURL = "${DownloadBase}/${Version}/install.ps1"
+    Write-Host "正在安装 test CLI：${InstallerURL}"
+    $InstallerScript = (Invoke-WebRequest -Uri $InstallerURL -UseBasicParsing).Content
+    & ([ScriptBlock]::Create($InstallerScript))
+} finally {
+    if ($null -eq $PreviousVersion) {
+        Remove-Item Env:XPARSER_VERSION -ErrorAction SilentlyContinue
+    } else {
+        $env:XPARSER_VERSION = $PreviousVersion
+    }
+    if ($null -eq $PreviousInstallDir) {
+        Remove-Item Env:INSTALL_DIR -ErrorAction SilentlyContinue
+    } else {
+        $env:INSTALL_DIR = $PreviousInstallDir
+    }
+}
+if (-not (Test-Path -LiteralPath $CLIPath -PathType Leaf)) {
+    throw "test CLI 安装失败：未找到 ${CLIPath}。请执行恢复脚本。"
+}
+& $CLIPath --profile workbuddy config set base_url $ProfileBaseURL
+if ($LASTEXITCODE -ne 0) {
+    throw "CLI 无法写入 ${EnvironmentLabel} Profile。请执行恢复脚本。"
+}
+
 Write-Host ""
-Write-Host "请完全退出并重新打开 WorkBuddy，然后在 TextIn xParse 中点击“连接”。"
-Write-Host "WorkBuddy 将安装唯一的 xparse-parse Skill、指定 pre 版 CLI，并打开 TextIn pre 环境授权页。"
-Write-Host "测试结束后请运行 restore-workbuddy-production.ps1 恢复执行前状态。"
+Write-Host "一键安装已完成：Connector、xparse-parse Skill、${EnvironmentLabel} CLI 和 Profile 均已就绪。"
+Write-Host "请完全退出并重新打开 WorkBuddy；需要验收登录归因时，再在 TextIn xParse 中点击“连接”。"
+Write-Host "测试结束后请执行对应版本目录中的 restore-workbuddy-production.ps1 恢复执行前状态。"

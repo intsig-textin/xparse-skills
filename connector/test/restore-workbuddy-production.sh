@@ -24,10 +24,26 @@ PROFILE_TEST_BACKUP="${PROFILE_DIR}.test.${TIMESTAMP}.bak"
 CLI_TEST_BACKUP="${CLI_PATH}.test.${TIMESTAMP}.bak"
 ACTIVE_SKILLS_TEST_BACKUP="${TEST_BACKUP_ROOT}/activated-skills.${TIMESTAMP}"
 MARKETPLACE_ICON_TEST_BACKUP="${TEST_BACKUP_ROOT}/marketplace-icon.${TIMESTAMP}.png"
+ORPHAN_RECOVERY_ROOT="${TEST_BACKUP_ROOT}/orphan-recovery.${TIMESTAMP}"
 
 fail() {
   printf '错误：%s\n' "$*" >&2
   exit 1
+}
+
+restore_orphaned_backup() {
+  current_path="$1"
+  backup_path="$2"
+  archive_name="$3"
+  if [ ! -e "${backup_path}" ]; then
+    return
+  fi
+  if [ -e "${current_path}" ]; then
+    mv "${current_path}" "${ORPHAN_RECOVERY_ROOT}/${archive_name}"
+  fi
+  mkdir -p "$(dirname "${current_path}")"
+  mv "${backup_path}" "${current_path}"
+  printf '已恢复孤立正式备份：%s\n' "${current_path}"
 }
 
 if [ ! -f "${CONNECTOR_DIR}/.workbuddy-test" ]; then
@@ -45,8 +61,28 @@ if [ ! -f "${CONNECTOR_DIR}/.workbuddy-test" ]; then
     fi
   done
   if [ -n "${ORPHANED_BACKUPS}" ]; then
-    fail "未找到测试 Connector marker，但检测到孤立备份：${ORPHANED_BACKUPS}
-这些备份可能来自未完成的旧测试事务，无法自动判断是否应恢复。请先归档或人工确认后再运行 enable。"
+    if [ -e "${ORPHAN_RECOVERY_ROOT}" ]; then
+      fail "孤立备份恢复目录已存在：${ORPHAN_RECOVERY_ROOT}。请稍后重试。"
+    fi
+    mkdir -p "${ORPHAN_RECOVERY_ROOT}"
+    printf '未找到测试 Connector marker，开始自动恢复孤立正式备份：%s\n' \
+      "${ORPHANED_BACKUPS}"
+    restore_orphaned_backup \
+      "${CATALOG_FILE}" "${CATALOG_BACKUP}" "connectors.current.json"
+    restore_orphaned_backup \
+      "${CONNECTOR_DIR}" "${CONNECTOR_BACKUP}" "connector.current"
+    restore_orphaned_backup \
+      "${MARKETPLACE_ICON}" "${MARKETPLACE_ICON_BACKUP}" "marketplace-icon.current.png"
+    restore_orphaned_backup \
+      "${PROFILE_DIR}" "${PROFILE_BACKUP}" "profile.current"
+    restore_orphaned_backup \
+      "${CLI_PATH}" "${CLI_BACKUP}" "xparse-cli.current"
+    restore_orphaned_backup \
+      "${ACTIVE_SKILLS_DIR}" "${ACTIVE_SKILLS_BACKUP}" "activated-skills.current"
+    printf '已自动恢复孤立备份，原当前状态已归档到：%s\n' \
+      "${ORPHAN_RECOVERY_ROOT}"
+    printf '现在可以重新运行 enable 一键安装命令。\n'
+    exit 0
   fi
   printf '当前未安装 TextIn xParse 测试 Connector，且没有遗留备份，无需恢复。\n'
   exit 0
