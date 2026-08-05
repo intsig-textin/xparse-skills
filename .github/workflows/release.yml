@@ -46,7 +46,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME}"
           COMMIT="$(git rev-parse --short HEAD)"
           DATE="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-          PKG="github.com/intsig-textin/xparse-skills/cli/cmd"
+          PKG="github.com/intsig-textin/xparse-skills/cli/cmd/parse"
           LDFLAGS="-s -w -X ${PKG}.version=${VERSION} -X ${PKG}.commit=${COMMIT} -X ${PKG}.date=${DATE}"
           OUTPUT="xparse-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
           go build -ldflags "${LDFLAGS}" -o "../dist/${OUTPUT}" .

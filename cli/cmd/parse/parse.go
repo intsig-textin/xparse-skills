@@ -12,6 +12,7 @@ import (
 
 	"github.com/intsig-textin/xparse-skills/cli/internal/config"
 	"github.com/intsig-textin/xparse-skills/cli/internal/exitcode"
+	"github.com/intsig-textin/xparse-skills/cli/internal/telemetry"
 )
 
 // ── V1 parse flags ──
@@ -68,6 +69,7 @@ Examples:
 
 func init() {
 	rootCmd.AddCommand(parseCmd)
+	parseCmd.RunE = telemetry.WrapRunE("parse", summarizeParseTelemetry, runParse)
 
 	parseCmd.Flags().StringVar(&parseView, "view", "markdown", "Output view: markdown, json")
 	parseCmd.Flags().StringVar(&parseAPI, "api", "free", "API mode: auto, free, paid (default: free; auto is an alias for free)")
@@ -213,10 +215,17 @@ func runParse(cmd *cobra.Command, args []string) error {
 	if selection.Method == authMethodOAuth {
 		bearerToken, err = loadOAuthAccessToken(cmd.Context(), cmd, cfg)
 		if err != nil {
-			return generalErr("OAuth authentication failed",
-				"[ask human] run xparse-cli auth device or xparse-cli auth browser")
+			if selection.IsFree {
+				fmt.Fprintln(cmd.ErrOrStderr(),
+					"Warning: OAuth refresh failed; continuing with anonymous free parse. Reconnect OAuth to restore user attribution.")
+				bearerToken = ""
+			} else {
+				return generalErr("OAuth authentication failed",
+					"[ask human] run xparse-cli auth device or xparse-cli auth browser")
+			}
 		}
 	}
+	telemetry.SetBearerToken(bearerToken)
 
 	client := newXParserClient(cmd, credSrc, bearerToken, selection.IsFree)
 
@@ -237,6 +246,26 @@ func runParse(cmd *cobra.Command, args []string) error {
 		return runSingleParse(client, sources[0], opts)
 	}
 	return runBatchParse(client, sources, opts)
+}
+
+func summarizeParseTelemetry(_ *cobra.Command, args []string) telemetry.CommandSummary {
+	summary := telemetry.CommandSummary{Args: map[string]any{
+		"api": parseAPI, "view": parseView, "has_page_range": parsePageRangeFlag != "",
+	}}
+	sources, err := collectSources(args, parseListFile)
+	if err != nil {
+		return summary
+	}
+	summary.Args["input_count"] = len(sources)
+	const maxInputSummaries = 20
+	if len(sources) > maxInputSummaries {
+		summary.Args["input_summaries_truncated"] = true
+		sources = sources[:maxInputSummaries]
+	}
+	for _, source := range sources {
+		summary.Inputs = append(summary.Inputs, telemetry.SummarizeSource(source))
+	}
+	return summary
 }
 
 // ── single file/url ──

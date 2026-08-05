@@ -1,13 +1,13 @@
 # WorkBuddy 本地测试指南
 
-本文说明如何在本机把 TextIn xParse pre Connector 临时注入 WorkBuddy，完成 OAuth、Skill 和解析链路验收，并在测试后恢复原有环境。
+本文说明如何在本机把 TextIn xParse test Connector 临时注入 WorkBuddy，完成 OAuth、Skill 和解析链路验收，并在测试后恢复原有环境。
 
 ## 适用范围
 
 本流程用于 WorkBuddy Connector 的开发和发布前验证，覆盖：
 
 - marketplace 中能够发现 TextIn xParse Connector；
-- Connector 自动安装指定的 pre 版 CLI 和唯一的 `xparse-parse` Skill；
+- Connector 自动安装指定的 test 版 CLI 和唯一的 `xparse-parse` Skill；
 - Device OAuth 能够完成连接、状态检查和退出；
 - WorkBuddy 使用隔离的 `workbuddy` Profile；
 - 免费解析默认生效，付费解析只在显式选择后生效；
@@ -26,7 +26,7 @@
 | `enable-workbuddy-test.ps1` | Windows | 备份正式状态并注入测试 Connector |
 | `restore-workbuddy-production.ps1` | Windows | 恢复正式状态并归档测试版本 |
 
-脚本默认测试 `v2.1.0-workbuddy-pre.1`，并从以下不可变版本目录下载资源：
+脚本默认测试 `v2.2.0-workbuddy-test.3`，并从以下不可变版本目录下载资源：
 
 ```text
 https://dllf.intsig.net/download/2026/Solution/xparse-cli/<version>/
@@ -44,7 +44,7 @@ https://dllf.intsig.net/download/2026/Solution/xparse-cli/<version>/
 启用脚本会校验以下内容，任一不符合都会停止注入：
 
 - OAuth client 是 `cli_textin_xparse_workbuddy`；
-- 授权环境是 `textin-api-pre.intsig.com`；
+- 授权环境是 `textin-sandbox.intsig.com`；
 - Connector id/source 是 `textin-xparse`；
 - 配置不引用 `/latest/`；
 - 图标 SHA256 与仓库版本一致；
@@ -60,23 +60,34 @@ go test ./...
 cd ..
 ```
 
-需要验证跨平台构建和发布文件时，可使用不可变的 pre 版本号：
+需要验证跨平台构建和发布文件时，可使用不可变的 test 版本号：
 
 ```bash
 cd cli
-./build.sh v2.1.0-workbuddy-pre.1
-DRY_RUN=1 ./publish-version.sh v2.1.0-workbuddy-pre.1
+./build.sh v2.2.0-workbuddy-test.3
+DRY_RUN=1 ./publish-version.sh v2.2.0-workbuddy-test.3
 cd ..
 ```
 
 `DRY_RUN=1` 只检查并展示发布清单，不上传文件。真实发布会修改远端下载目录，必须经过单独确认后执行。
+
+正式 2.2.0 分发物使用生产 Connector 配置，并继续写入不可变版本目录：
+
+```bash
+cd cli
+./build.sh v2.2.0
+DRY_RUN=1 ./publish-version.sh v2.2.0 prod
+cd ..
+```
+
+以上命令只构建并审查生产发布清单；去掉 `DRY_RUN=1` 才会上传，上传前必须单独确认。
 
 ## 2. macOS / Linux 注入测试 Connector
 
 在仓库根目录运行：
 
 ```bash
-XPARSER_VERSION=v2.1.0-workbuddy-pre.1 \
+XPARSER_VERSION=v2.2.0-workbuddy-test.3 \
   sh connector/test/enable-workbuddy-test.sh
 ```
 
@@ -95,12 +106,18 @@ XPARSER_VERSION=v2.1.0-workbuddy-pre.1 \
 在仓库根目录打开 PowerShell：
 
 ```powershell
-$env:XPARSER_VERSION = "v2.1.0-workbuddy-pre.1"
+$env:XPARSER_VERSION = "v2.2.0-workbuddy-test.3"
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File connector/test/enable-workbuddy-test.ps1
 ```
 
 脚本成功后，完全退出并重新打开 WorkBuddy。
+
+版本发布后，Windows 测试人员无需下载仓库文件，直接在 PowerShell 执行：
+
+```powershell
+irm 'https://dllf.intsig.net/download/2026/Solution/xparse-cli/v2.2.0-workbuddy-test.3/enable-workbuddy.ps1' | iex
+```
 
 ## 4. 使用仓库中的本地 Connector/Skill 资源
 
@@ -118,7 +135,7 @@ cp connector/marketplace-entry.json "$XPARSE_ASSET_DIR/workbuddy-marketplace-ent
 )
 
 XPARSE_TEST_ASSET_DIR="$XPARSE_ASSET_DIR" \
-  XPARSER_VERSION=v2.1.0-workbuddy-pre.1 \
+  XPARSER_VERSION=v2.2.0-workbuddy-test.3 \
   sh connector/test/enable-workbuddy-test.sh
 ```
 
@@ -146,7 +163,7 @@ $env:XPARSE_TEST_ASSET_DIR = "C:\path\to\workbuddy-test-assets"
 - marketplace 中只出现一个 TextIn xParse Connector 条目；
 - Connector 图标和名称正确；
 - 点击连接后能够安装 CLI；
-- 版本检查显示预期的 `2.1.0` CLI；
+- 版本检查显示预期的 `2.2.0` CLI；
 - Connector 只激活 `xparse-parse` Skill。
 
 ### OAuth
@@ -199,6 +216,12 @@ powershell -NoProfile -ExecutionPolicy Bypass `
   -File connector/test/restore-workbuddy-production.ps1
 ```
 
+版本发布后可直接一键恢复：
+
+```powershell
+irm 'https://dllf.intsig.net/download/2026/Solution/xparse-cli/v2.2.0-workbuddy-test.3/restore-workbuddy-production.ps1' | iex
+```
+
 恢复脚本会：
 
 - 恢复测试前的 marketplace 注册表和图标；
@@ -216,7 +239,15 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 
 ### 缺少 marker 但存在孤立备份
 
-恢复脚本无法确定这些备份来自哪次事务，因此会停止。记录提示中的完整路径，先人工确认或归档，再重新执行；不要直接批量删除。
+macOS / Linux 恢复脚本会自动处理这类未完成事务：
+
+1. 将当前同名 Profile、CLI、Skill 或 Connector 状态归档到
+   `.textin-xparse-test-backups/orphan-recovery.<timestamp>`；
+2. 将 `.production.bak` 恢复到正式路径，不永久删除唯一的正式备份；
+3. 清除对下一次 enable 的备份路径冲突。
+
+恢复成功后可直接重新执行 enable 一键安装命令。macOS、Linux 和
+Windows 回滚脚本使用相同的归档后恢复策略。
 
 ### WorkBuddy 中没有出现 Connector
 
@@ -229,7 +260,7 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 
 ### OAuth 打开了错误环境
 
-测试配置必须使用 `textin-api-pre.intsig.com` 和 `cli_textin_xparse_workbuddy`。如果不是，停止测试并执行恢复脚本，不要继续授权。
+测试配置必须使用 `textin-sandbox.intsig.com` 和 `cli_textin_xparse_workbuddy`。如果不是，停止测试并执行恢复脚本，不要继续授权。
 
 ### 刷新测试版本
 

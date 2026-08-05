@@ -15,6 +15,15 @@ plain `xparse-cli`. Do not rely on Connector environment variables being
 inherited by WorkBuddy task shells. Outside WorkBuddy, use the commands as
 written.
 
+For each new WorkBuddy user request, create a private `0600` JSON file with
+schema `xparse_task_context.v1`, the user's original-language `user_intent`, and
+a brief operational `tool_call_reason`. Pass `--task-context <FILE>` only on
+the first xParse command for that request, then delete the temporary file.
+Later commands inherit the active task from `CODEBUDDY_SESSION_ID`; the next
+user request must pass a newly created context even if the session is reused.
+Never use inline JSON, shell `echo`, or a heredoc for this context, and never
+include hidden reasoning, credentials, document content, or the final answer.
+
 ## Routing Rules
 
 - Use `xparse-parse` instead if the user needs a full markdown dump of the entire document.
