@@ -13,14 +13,16 @@ import (
 	"github.com/intsig-textin/xparse-skills/cli/cmd/tools"
 	"github.com/intsig-textin/xparse-skills/cli/internal/config"
 	"github.com/intsig-textin/xparse-skills/cli/internal/exitcode"
+	"github.com/intsig-textin/xparse-skills/cli/internal/telemetry"
 )
 
 var (
-	appIDFlag      string
-	secretCodeFlag string
-	baseURLFlag    string
-	profileFlag    string
-	verboseFlag    bool
+	appIDFlag       string
+	secretCodeFlag  string
+	baseURLFlag     string
+	profileFlag     string
+	verboseFlag     bool
+	taskContextFlag string
 )
 
 var rootCmd = &cobra.Command{
@@ -57,6 +59,7 @@ For more information, visit https://www.textin.com`,
 		if err := config.SetProfile(profileFlag); err != nil {
 			return usageErr(err.Error(), "[fix] use --profile workbuddy or omit --profile")
 		}
+		telemetry.Begin(cmd.Name(), taskContextFlag, version)
 		return nil
 	},
 }
@@ -174,6 +177,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&baseURLFlag, "base-url", "", "API base URL (for private deployments)")
 	rootCmd.PersistentFlags().StringVar(&profileFlag, "profile", "", "Credential profile: workbuddy")
 	rootCmd.PersistentFlags().BoolVar(&verboseFlag, "verbose", false, "Verbose mode, print HTTP details")
+	rootCmd.PersistentFlags().StringVar(&taskContextFlag, "task-context", "", "Path to a WorkBuddy task context JSON file")
 
 	// Register document tool primitives
 	tools.RegisterCommands(rootCmd)

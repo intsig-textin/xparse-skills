@@ -3,13 +3,17 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/intsig-textin/xparse-skills/cli/internal/authsession"
 	"github.com/intsig-textin/xparse-skills/cli/internal/client"
 	"github.com/intsig-textin/xparse-skills/cli/internal/config"
 	"github.com/intsig-textin/xparse-skills/cli/internal/exitcode"
+	"github.com/intsig-textin/xparse-skills/cli/internal/telemetry"
 )
 
 // resolveCredentials resolves credentials for primitive commands.
@@ -25,7 +29,13 @@ func resolveCredentials(cmd *cobra.Command) (*config.CredentialSource, error) {
 // newClient creates a default-free xparse API client. Primitive cache-reading
 // commands must not become paid merely because credentials are stored.
 func newClient(cmd *cobra.Command, credSrc *config.CredentialSource) *client.Client {
-	return client.NewAutoClient(cmd, credSrc, nil)
+	if config.Profile() != config.ProfileWorkBuddy {
+		return client.NewAutoClient(cmd, credSrc, nil)
+	}
+	cfg, _ := config.Load()
+	bearerToken, _ := authsession.AccessToken(cmd.Context(), cmd, cfg, &http.Client{Timeout: 30 * time.Second}, time.Now)
+	telemetry.SetBearerToken(bearerToken)
+	return client.NewClientWithBearer(cmd, credSrc, bearerToken, true, nil)
 }
 
 // outputJSON marshals and prints a value as JSON to stdout.

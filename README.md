@@ -297,14 +297,18 @@ OAuth 参数优先级：
 | Browser redirect | `--redirect-uri` > `XPARSE_OAUTH_REDIRECT_URI` > `oauth.redirect_uri` > `http://127.0.0.1:0/callback` |
 | Base URL | `--base-url` > `XPARSE_BASE_URL` > `base_url` > `https://api.textin.com` |
 
-不传 `--api` 时始终使用匿名 free API；`--api auto` 仅作为兼容别名保留，行为同样
-固定为 free。已有 AppKey、OAuth 登录态或上次选择的认证方式都不会改变默认路由。
+不传 `--api` 时始终使用 free API；`--api auto` 仅作为兼容别名保留，行为同样
+固定为 free。有效 OAuth 登录态会随免费解析请求发送，用于用户归因，但已有 AppKey、
+OAuth 登录态或上次选择的认证方式都不会改变默认路由或触发付费。
 只有显式传入 `--api paid` 才会读取付费凭证；未同时指定 `--auth-method` 时，付费模式
 保持 AppKey 优先，没有完整 AppKey 时再选择有效 OAuth 会话。显式选择的 OAuth 或
 AppKey 失败时不会切换到另一种凭证。
 
 成功执行 `auth app-key` 或 OAuth 登录仍会记录用户最后明确选择的认证方式，但该设置
-仅供显式 `--api paid` 使用。`--api free` 与 `--api auto` 都不会发送认证头。
+仅供显式 `--api paid` 使用。`--api free` 与 `--api auto` 在存在有效 OAuth 会话时发送
+Bearer 用于身份归因；没有 OAuth 会话时继续匿名调用，且始终不发送 AppKey。
+免费解析遇到 OAuth 刷新失败时会输出警告并匿名继续，确保解析可用；该降级仅适用于
+免费接口。付费 OAuth 刷新失败仍会停止请求，也不会回退到 AppKey。
 
 ## 退出码与错误处理
 

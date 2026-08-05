@@ -45,16 +45,16 @@ func TestAPIAuthMethodMatrix(t *testing.T) {
 		wantMethod authMethod
 		wantErr    bool
 	}{
-		{name: "free anonymous", api: APIModeFree, appKey: completeAppKey, wantFree: true},
+		{name: "free with oauth session", api: APIModeFree, appKey: completeAppKey, wantFree: true, wantMethod: authMethodOAuth},
 		{name: "free rejects explicit method", api: APIModeFree, method: "app-key", appKey: completeAppKey, wantErr: true},
 		{name: "paid explicit appkey", api: APIModePaid, method: "app-key", appKey: completeAppKey, wantMethod: authMethodAppKey},
 		{name: "paid explicit oauth", api: APIModePaid, method: "oauth", appKey: completeAppKey, wantMethod: authMethodOAuth},
 		{name: "paid legacy appkey first", api: APIModePaid, appKey: completeAppKey, wantMethod: authMethodAppKey},
 		{name: "paid oauth when no appkey", api: APIModePaid, appKey: noAppKey, wantMethod: authMethodOAuth},
 		{name: "auto rejects explicit oauth", api: APIModeAuto, method: "oauth", appKey: completeAppKey, wantErr: true},
-		{name: "auto ignores both credentials", api: APIModeAuto, appKey: completeAppKey, wantFree: true},
-		{name: "auto ignores oauth only", api: APIModeAuto, appKey: noAppKey, wantFree: true},
-		{name: "auto ignores configured method", api: APIModeAuto, appKey: completeAppKey, cfgMethod: "oauth", wantFree: true},
+		{name: "auto uses oauth identity and ignores appkey", api: APIModeAuto, appKey: completeAppKey, wantFree: true, wantMethod: authMethodOAuth},
+		{name: "auto uses oauth identity", api: APIModeAuto, appKey: noAppKey, wantFree: true, wantMethod: authMethodOAuth},
+		{name: "auto uses oauth identity and ignores configured method", api: APIModeAuto, appKey: completeAppKey, cfgMethod: "oauth", wantFree: true, wantMethod: authMethodOAuth},
 		{name: "oauth rejects appkey flags", api: APIModePaid, method: "oauth", appKey: completeAppKey, changeApp: true, wantErr: true},
 	}
 	for _, test := range tests {
@@ -84,13 +84,13 @@ func TestAPIAuthMethodMatrix(t *testing.T) {
 
 func TestVersionOutputNormalizesLeadingV(t *testing.T) {
 	oldVersion := version
-	version = "v2.1.0"
+	version = "v2.2.0"
 	t.Cleanup(func() { version = oldVersion })
 	var output stringsBuilder
 	versionCmd.SetOut(&output)
 	t.Cleanup(func() { versionCmd.SetOut(os.Stdout) })
 	versionCmd.Run(versionCmd, nil)
-	if got := output.String(); got != "xparse-cli version 2.1.0\n" {
+	if got := output.String(); got != "xparse-cli version 2.2.0\n" {
 		t.Fatalf("version output = %q", got)
 	}
 }
