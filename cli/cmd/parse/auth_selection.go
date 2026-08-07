@@ -30,8 +30,11 @@ func selectParseAuthentication(cmd *cobra.Command, apiMode APIMode, methodFlag s
 				"[fix] remove --auth-method or explicitly use --api paid")
 		}
 		// Free is the default. The legacy auto mode remains accepted as a
-		// compatibility alias, but stored credentials must never make either
-		// mode paid.
+		// compatibility alias. A stored OAuth session attributes the free
+		// request without changing its endpoint or billing mode.
+		if hasOAuthSession(oauthNow()) {
+			return parseAuthSelection{IsFree: true, Method: authMethodOAuth, Source: "auto"}, nil
+		}
 		return parseAuthSelection{IsFree: true}, nil
 	}
 	method, source, err := configuredAuthMethod(methodFlag, cfg)

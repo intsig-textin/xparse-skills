@@ -60,12 +60,34 @@ $ProfileTestBackup = "${ProfileDir}.test.${Timestamp}.bak"
 $CLITestBackup = "${CLIPath}.test.${Timestamp}.bak"
 $ActiveSkillsTestBackup = Join-Path $TestBackupRoot "activated-skills.${Timestamp}"
 $MarketplaceIconTestBackup = Join-Path $TestBackupRoot "marketplace-icon.${Timestamp}.png"
+$OrphanRecoveryRoot = Join-Path $TestBackupRoot "orphan-recovery.${Timestamp}"
 $MarkerFile = Join-Path $ConnectorDir ".workbuddy-test"
 $UTF8Strict = New-Object System.Text.UTF8Encoding($false, $true)
 
 function Read-Utf8Json {
     param([string]$Path)
     return ([System.IO.File]::ReadAllText($Path, $UTF8Strict) | ConvertFrom-Json)
+}
+
+function Restore-OrphanedBackup {
+    param(
+        [string]$CurrentPath,
+        [string]$BackupPath,
+        [string]$ArchiveName
+    )
+    if (-not (Test-Path -LiteralPath $BackupPath)) {
+        return
+    }
+    if (Test-Path -LiteralPath $CurrentPath) {
+        Move-Item -LiteralPath $CurrentPath `
+            -Destination (Join-Path $OrphanRecoveryRoot $ArchiveName)
+    }
+    $CurrentParent = Split-Path -Parent $CurrentPath
+    if (-not (Test-Path -LiteralPath $CurrentParent -PathType Container)) {
+        New-Item -ItemType Directory -Path $CurrentParent -Force | Out-Null
+    }
+    Move-Item -LiteralPath $BackupPath -Destination $CurrentPath
+    Write-Host "已恢复孤立正式备份：${CurrentPath}"
 }
 
 if (-not (Test-Path -LiteralPath $MarkerFile -PathType Leaf)) {
@@ -79,11 +101,26 @@ if (-not (Test-Path -LiteralPath $MarkerFile -PathType Leaf)) {
     ) | Where-Object { Test-Path -LiteralPath $_ }
     if ($OrphanedBackups.Count -gt 0) {
         $BackupList = ($OrphanedBackups | ForEach-Object { "  - $_" }) -join "`n"
-        throw @"
-未找到测试 Connector marker，但检测到孤立备份：
-$BackupList
-这些备份可能来自未完成的旧测试事务，无法自动判断是否应恢复。请先归档或人工确认后再运行 enable。
-"@
+        if (Test-Path -LiteralPath $OrphanRecoveryRoot) {
+            throw "孤立备份恢复目录已存在：${OrphanRecoveryRoot}。请稍后重试。"
+        }
+        New-Item -ItemType Directory -Path $OrphanRecoveryRoot -Force | Out-Null
+        Write-Host "未找到测试 Connector marker，开始自动恢复孤立正式备份："
+        Write-Host $BackupList
+        Restore-OrphanedBackup $CatalogFile $CatalogBackup "connectors.current.json"
+        Restore-OrphanedBackup $ConnectorDir $ConnectorBackup "connector.current"
+        Restore-OrphanedBackup $MarketplaceIcon $MarketplaceIconBackup `
+            "marketplace-icon.current.png"
+        Restore-OrphanedBackup $ProfileDir $ProfileBackup "profile.current"
+        Restore-OrphanedBackup $CLIPath $CLIBackup "xparse-cli.current.exe"
+        Restore-OrphanedBackup $ActiveSkillsDir $ActiveSkillsBackup `
+            "activated-skills.current"
+        if (Test-Path -LiteralPath $CatalogFile -PathType Leaf) {
+            Read-Utf8Json $CatalogFile | Out-Null
+        }
+        Write-Host "已自动恢复孤立备份，原当前状态已归档到：${OrphanRecoveryRoot}"
+        Write-Host "现在可以重新运行 enable 一键安装命令。"
+        exit 0
     }
     Write-Host "当前未安装 TextIn xParse 测试 Connector，且没有遗留备份，无需恢复。"
     exit 0

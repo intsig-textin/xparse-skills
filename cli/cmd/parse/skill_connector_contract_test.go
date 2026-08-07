@@ -66,6 +66,12 @@ func TestWorkBuddyConnectorCommandAndExtractionContract(t *testing.T) {
 			t.Fatalf("platform %q auth command is not native Device Flow: %q",
 				platform, contract.Auth[platform])
 		}
+		if !strings.Contains(contract.Init[platform], "/v2.2.0/") ||
+			!strings.Contains(contract.Init[platform],
+				"--profile workbuddy config set base_url https://api.textin.com") {
+			t.Fatalf("platform %q production init is not pinned to 2.2.0: %q",
+				platform, contract.Init[platform])
+		}
 		for _, command := range []string{
 			contract.Auth[platform],
 			contract.UnAuth[platform],
@@ -90,8 +96,11 @@ func TestWorkBuddyConnectorCommandAndExtractionContract(t *testing.T) {
 	if contract.AuthURLDomain != "api.textin.com" {
 		t.Fatalf("authUrlDomain = %q", contract.AuthURLDomain)
 	}
-	if contract.Env["XPARSE_OAUTH_CLIENT_ID"] != "cli_textin_xparse" {
+	if contract.Env["XPARSE_OAUTH_CLIENT_ID"] != "cli_textin_xparse_workbuddy" {
 		t.Fatalf("Connector public client ID = %q", contract.Env["XPARSE_OAUTH_CLIENT_ID"])
+	}
+	if contract.Env["XPARSE_BASE_URL"] != "https://api.textin.com" {
+		t.Fatalf("Connector base URL = %q", contract.Env["XPARSE_BASE_URL"])
 	}
 	if contract.Env["XPARSE_CONFIG_DIR"] != "" ||
 		contract.Env["XPARSE_CLIENT_FROM"] != "" {
@@ -130,8 +139,8 @@ func TestWorkBuddyConnectorCommandAndExtractionContract(t *testing.T) {
 	}
 
 	versionPattern := regexp.MustCompile(contract.VersionCheck.VersionPattern)
-	if !versionPattern.MatchString("xparse-cli version 2.1.0") ||
-		contract.VersionCheck.MinVersion != "2.1.0" {
+	if !versionPattern.MatchString("xparse-cli version 2.2.0") ||
+		contract.VersionCheck.MinVersion != "2.2.0" {
 		t.Fatalf("invalid version contract: %#v", contract.VersionCheck)
 	}
 	for _, legacy := range []string{"1.0.4", "2.0.3"} {
@@ -159,7 +168,7 @@ func TestWorkBuddyConnectorCommandAndExtractionContract(t *testing.T) {
 	}
 }
 
-func TestWorkBuddyPreConnectorIsPinnedAndPreOnly(t *testing.T) {
+func TestWorkBuddyTestConnectorIsPinnedAndSandboxOnly(t *testing.T) {
 	data := readRepositoryFile(t, "connector", "cli.test.json")
 	var contract connectorCLIContract
 	if err := json.Unmarshal(data, &contract); err != nil {
@@ -167,19 +176,19 @@ func TestWorkBuddyPreConnectorIsPinnedAndPreOnly(t *testing.T) {
 	}
 	for _, platform := range []string{"darwin", "linux", "win32"} {
 		initCommand := contract.Init[platform]
-		if !strings.Contains(initCommand, "/v2.1.0-workbuddy-pre.1/") ||
-			!strings.Contains(initCommand, "textin-api-pre.intsig.com") ||
+		if !strings.Contains(initCommand, "/v2.2.0-workbuddy-test.3/") ||
+			!strings.Contains(initCommand, "textin-sandbox.intsig.com") ||
 			!strings.Contains(initCommand, "--profile workbuddy config set base_url") {
-			t.Fatalf("platform %q pre init is not pinned to the pre profile: %q",
+			t.Fatalf("platform %q test init is not pinned to sandbox: %q",
 				platform, initCommand)
 		}
 		if strings.Contains(initCommand, "/latest/") {
-			t.Fatalf("platform %q pre init uses the rolling release directory: %q",
+			t.Fatalf("platform %q test init uses the rolling release directory: %q",
 				platform, initCommand)
 		}
 	}
-	if contract.AuthURLDomain != "textin-api-pre.intsig.com" {
-		t.Fatalf("pre authUrlDomain = %q", contract.AuthURLDomain)
+	if contract.AuthURLDomain != "textin-sandbox.intsig.com" {
+		t.Fatalf("test authUrlDomain = %q", contract.AuthURLDomain)
 	}
 	if contract.Env["XPARSE_OAUTH_CLIENT_ID"] != "cli_textin_xparse_workbuddy" {
 		t.Fatalf("test Connector public client ID = %q",
@@ -189,6 +198,20 @@ func TestWorkBuddyPreConnectorIsPinnedAndPreOnly(t *testing.T) {
 	publishScript := string(readRepositoryFile(t, "cli", "publish-version.sh"))
 	if !strings.Contains(publishScript, `BASE_PATH="xparse-cli/${VERSION}"`) {
 		t.Fatal("isolated publisher does not target the requested version directory")
+	}
+	for _, releaseContract := range []string{
+		`RELEASE_KIND="${2:-test}"`,
+		`CONNECTOR_CONFIG="${CONNECTOR_DIR}/cli.json"`,
+		`CONNECTOR_CONFIG="${CONNECTOR_DIR}/cli.pre.json"`,
+		`CONNECTOR_CONFIG="${CONNECTOR_DIR}/cli.test.json"`,
+		`upload "${PINNED_INSTALL_SH}"`,
+		`upload "${PINNED_INSTALL_PS1}"`,
+		`upload "${PINNED_ENABLE_SH}"`,
+		`upload "${PINNED_ENABLE_PS1}"`,
+	} {
+		if !strings.Contains(publishScript, releaseContract) {
+			t.Fatalf("isolated publisher is missing release contract %q", releaseContract)
+		}
 	}
 	if strings.Contains(publishScript, `"${BASE_PATH}/latest/`) ||
 		strings.Contains(publishScript, `"xparse-cli/latest/`) {
@@ -203,6 +226,7 @@ func TestWorkBuddyPreConnectorIsPinnedAndPreOnly(t *testing.T) {
 		`"${BASE_PATH}/enable-workbuddy-test.sh"`,
 		`"${BASE_PATH}/restore-workbuddy-production.sh"`,
 		`"${BASE_PATH}/enable-workbuddy-test.ps1"`,
+		`"${BASE_PATH}/enable-workbuddy.ps1"`,
 		`"${BASE_PATH}/restore-workbuddy-production.ps1"`,
 	} {
 		if !strings.Contains(publishScript, artifact) {
@@ -220,6 +244,35 @@ func TestWorkBuddyPreConnectorIsPinnedAndPreOnly(t *testing.T) {
 	uploadScript := string(readRepositoryFile(t, "cli", "upload.sh"))
 	if !strings.Contains(uploadScript, "--content-type=${content_type}") {
 		t.Fatal("uploader does not forward the explicit UTF-8 content type to azcopy")
+	}
+}
+
+func TestWorkBuddyPreConnectorIsPinnedToPreOnly(t *testing.T) {
+	data := readRepositoryFile(t, "connector", "cli.pre.json")
+	var contract connectorCLIContract
+	if err := json.Unmarshal(data, &contract); err != nil {
+		t.Fatal(err)
+	}
+	for _, platform := range []string{"darwin", "linux", "win32"} {
+		initCommand := contract.Init[platform]
+		if !strings.Contains(initCommand, "/v2.2.0-workbuddy-pre.2/") ||
+			!strings.Contains(initCommand, "textin-api-pre.intsig.com") ||
+			!strings.Contains(initCommand, "--profile workbuddy config set base_url") {
+			t.Fatalf("platform %q pre init is not pinned to pre: %q",
+				platform, initCommand)
+		}
+		if strings.Contains(initCommand, "textin-sandbox.intsig.com") ||
+			strings.Contains(initCommand, "/latest/") {
+			t.Fatalf("platform %q pre init references the wrong environment: %q",
+				platform, initCommand)
+		}
+	}
+	if contract.AuthURLDomain != "textin-api-pre.intsig.com" {
+		t.Fatalf("pre authUrlDomain = %q", contract.AuthURLDomain)
+	}
+	if contract.Env["XPARSE_OAUTH_CLIENT_ID"] != "cli_textin_xparse_workbuddy" {
+		t.Fatalf("pre Connector public client ID = %q",
+			contract.Env["XPARSE_OAUTH_CLIENT_ID"])
 	}
 }
 
@@ -317,11 +370,11 @@ func TestWorkBuddyMacOSTestInjectionRestoresUninstalledBaseline(t *testing.T) {
 	assertFileContains(t, filepath.Join(connectorDir, "cli.json"),
 		"cli_textin_xparse_workbuddy")
 	assertFileContains(t, filepath.Join(connectorDir, "cli.json"),
-		"textin-api-pre.intsig.com")
+		"textin-sandbox.intsig.com")
 	assertFileContains(t, filepath.Join(connectorDir, "connector-meta.json"),
 		`"source": "textin-xparse"`)
 	assertFileContains(t, filepath.Join(connectorDir, ".workbuddy-test"),
-		"v2.1.0-workbuddy-pre.1")
+		"v2.2.0-workbuddy-test.3")
 	testIcon := readRepositoryFile(t, "connector", "icon.png")
 	assertFileContent(t, filepath.Join(connectorDir, "icon.png"), testIcon)
 	assertFileContent(t, marketplaceIcon, testIcon)
@@ -533,7 +586,7 @@ func TestWorkBuddyLegacyRefreshPreservesActivatedSkillForRestore(t *testing.T) {
 	assertFileContains(t, filepath.Join(activeSkillsDir, "xparse-parse", "SKILL.md"),
 		"name: xparse-parse")
 	assertFileContains(t, filepath.Join(connectorDir, ".workbuddy-test"),
-		"v2.1.0-workbuddy-pre.1")
+		"v2.2.0-workbuddy-test.3")
 	assertFileContent(t, marketplaceIcon+".production.bak", legacyMarketplaceIcon)
 	assertFileContent(t, marketplaceIcon, readRepositoryFile(t, "connector", "icon.png"))
 
@@ -559,41 +612,120 @@ func TestWorkBuddyLegacyRefreshPreservesActivatedSkillForRestore(t *testing.T) {
 	}
 }
 
-func TestWorkBuddyRestoreRejectsOrphanedFixedBackups(t *testing.T) {
+func TestWorkBuddyRestoreRecoversOrphanedFixedBackups(t *testing.T) {
 	tempDir := t.TempDir()
 	marketplaceRoot := filepath.Join(tempDir, "marketplace")
 	profileDir := filepath.Join(tempDir, "profiles", "workbuddy")
 	profileBackup := profileDir + ".production.bak"
 	cliPath := filepath.Join(tempDir, "bin", "xparse-cli")
 	activeSkillsDir := filepath.Join(tempDir, "activated-skills", "connector-textin-xparse")
-	if err := os.MkdirAll(profileBackup, 0o700); err != nil {
+	testBackupRoot := filepath.Join(tempDir, "test-backups")
+	assetDir := filepath.Join(tempDir, "assets")
+	catalogPath := filepath.Join(marketplaceRoot, ".codebuddy-connector", "connectors.json")
+	for _, dir := range []string{
+		profileDir,
+		profileBackup,
+		filepath.Dir(cliPath),
+		filepath.Join(activeSkillsDir, "xparse-parse"),
+		filepath.Join(activeSkillsDir+".production.bak", "legacy-skill"),
+		filepath.Dir(catalogPath),
+		assetDir,
+	} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	testConfig := []byte("base_url: https://textin-sandbox.intsig.com\n")
+	productionConfig := []byte("base_url: https://api.textin.com\n")
+	if err := os.WriteFile(filepath.Join(profileDir, "config.yaml"), testConfig, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	orphanedConfig := filepath.Join(profileBackup, "config.yaml")
-	if err := os.WriteFile(orphanedConfig, []byte("base_url: orphaned\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(profileBackup, "config.yaml"), productionConfig, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	testCLI := []byte("test-cli")
+	productionCLI := []byte("production-cli")
+	if err := os.WriteFile(cliPath, testCLI, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cliPath+".production.bak", productionCLI, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	testSkill := []byte("test-skill")
+	productionSkill := []byte("production-skill")
+	if err := os.WriteFile(
+		filepath.Join(activeSkillsDir, "xparse-parse", "SKILL.md"), testSkill, 0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(activeSkillsDir+".production.bak", "legacy-skill", "SKILL.md"),
+		productionSkill,
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+	productionCatalog := []byte("{\"connectors\":[]}\n")
+	if err := os.WriteFile(catalogPath, productionCatalog, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeWorkBuddyTestAssets(t, assetDir)
 
-	command := exec.Command(
-		"/bin/sh",
-		repositoryPath(t, "connector", "test", "restore-workbuddy-production.sh"),
+	runWorkBuddyScript(
+		t,
+		"restore-workbuddy-production.sh",
+		marketplaceRoot,
+		profileDir,
+		cliPath,
+		assetDir,
+		testBackupRoot,
+		activeSkillsDir,
 	)
-	command.Env = append(
-		os.Environ(),
-		"WORKBUDDY_MARKETPLACE_ROOT="+marketplaceRoot,
-		"XPARSE_WORKBUDDY_PROFILE_DIR="+profileDir,
-		"XPARSE_CLI_PATH="+cliPath,
-		"WORKBUDDY_CONNECTOR_SKILLS_DIR="+activeSkillsDir,
+	assertFileContent(t, filepath.Join(profileDir, "config.yaml"), productionConfig)
+	assertFileContent(t, cliPath, productionCLI)
+	assertFileContent(
+		t,
+		filepath.Join(activeSkillsDir, "legacy-skill", "SKILL.md"),
+		productionSkill,
 	)
-	output, err := command.CombinedOutput()
-	if err == nil {
-		t.Fatalf("restore unexpectedly accepted orphaned backup:\n%s", output)
+	for _, backup := range []string{
+		profileBackup,
+		cliPath + ".production.bak",
+		activeSkillsDir + ".production.bak",
+	} {
+		if _, err := os.Stat(backup); !os.IsNotExist(err) {
+			t.Fatalf("orphaned backup remains at %s: %v", backup, err)
+		}
 	}
-	if !bytes.Contains(output, []byte("检测到孤立备份")) ||
-		!bytes.Contains(output, []byte(profileBackup)) {
-		t.Fatalf("restore error does not identify orphaned backup:\n%s", output)
+	recoveryRoots, err := filepath.Glob(filepath.Join(testBackupRoot, "orphan-recovery.*"))
+	if err != nil || len(recoveryRoots) != 1 {
+		t.Fatalf("orphan recovery roots = %v, err = %v", recoveryRoots, err)
 	}
-	assertFileContent(t, orphanedConfig, []byte("base_url: orphaned\n"))
+	assertFileContent(t, filepath.Join(recoveryRoots[0], "profile.current", "config.yaml"), testConfig)
+	assertFileContent(t, filepath.Join(recoveryRoots[0], "xparse-cli.current"), testCLI)
+	assertFileContent(
+		t,
+		filepath.Join(recoveryRoots[0], "activated-skills.current", "xparse-parse", "SKILL.md"),
+		testSkill,
+	)
+
+	runWorkBuddyScript(
+		t,
+		"enable-workbuddy-test.sh",
+		marketplaceRoot,
+		profileDir,
+		cliPath,
+		assetDir,
+		testBackupRoot,
+		activeSkillsDir,
+	)
+	assertFileContains(
+		t,
+		filepath.Join(marketplaceRoot, "connectors", "textin-xparse", ".workbuddy-test"),
+		"v2.2.0-workbuddy-test.3",
+	)
+	assertFileContent(t, filepath.Join(profileDir+".production.bak", "config.yaml"), productionConfig)
+	assertFileContent(t, cliPath+".production.bak", productionCLI)
 }
 
 func TestWorkBuddyWindowsSwitchScriptsMatchMacOSSafetyContract(t *testing.T) {
@@ -632,9 +764,9 @@ func TestWorkBuddyWindowsSwitchScriptsMatchMacOSSafetyContract(t *testing.T) {
 		"enable-workbuddy-test.ps1",
 	))
 	for _, expected := range []string{
-		"v2.1.0-workbuddy-pre.1",
+		"v2.2.0-workbuddy-test.3",
 		"cli_textin_xparse_workbuddy",
-		"textin-api-pre.intsig.com",
+		"textin-sandbox.intsig.com",
 		"workbuddy-cli.json",
 		"workbuddy-connector-meta.json",
 		"workbuddy-icon.png",
@@ -643,6 +775,10 @@ func TestWorkBuddyWindowsSwitchScriptsMatchMacOSSafetyContract(t *testing.T) {
 		"Expand-Archive",
 		"Get-FileHash",
 		"ExpectedIconSHA256",
+		"install.ps1",
+		"XPARSE_EXPECTED_AUTH_DOMAIN",
+		"XPARSE_PROFILE_BASE_URL",
+		"config set base_url $ProfileBaseURL",
 	} {
 		if !strings.Contains(enableScript, expected) {
 			t.Fatalf("Windows enable script does not contain %q", expected)
@@ -651,6 +787,26 @@ func TestWorkBuddyWindowsSwitchScriptsMatchMacOSSafetyContract(t *testing.T) {
 	if strings.Contains(enableScript, "${DownloadBase}/latest/workbuddy-cli.json") ||
 		strings.Contains(enableScript, `$env:XPARSER_VERSION } else { "latest" }`) {
 		t.Fatal("Windows enable script references the rolling release directory")
+	}
+	restoreScript := string(readRepositoryFile(
+		t,
+		"connector",
+		"test",
+		"restore-workbuddy-production.ps1",
+	))
+	for _, expected := range []string{
+		"OrphanRecoveryRoot",
+		"Restore-OrphanedBackup",
+		"orphan-recovery.",
+		"开始自动恢复孤立正式备份",
+		"现在可以重新运行 enable 一键安装命令",
+	} {
+		if !strings.Contains(restoreScript, expected) {
+			t.Fatalf("Windows restore script does not contain %q", expected)
+		}
+	}
+	if strings.Contains(restoreScript, "无法自动判断是否应恢复") {
+		t.Fatal("Windows restore script still rejects orphaned backups")
 	}
 }
 
@@ -838,9 +994,14 @@ func TestSkillAndConnectorUseExactTransparentLogo(t *testing.T) {
 
 func TestSkillUsesFormalCLIWithoutCredentialCollection(t *testing.T) {
 	skill := string(readRepositoryFile(t, "skills", "xparse-parse", "SKILL.md"))
+	const purchaseURL = "https://www.textin.com/market/chager/pdf_to_markdown"
 	if !strings.Contains(skill, "xparse-cli parse") ||
 		!strings.Contains(skill, "references/authentication.md") {
 		t.Fatal("Skill does not route parsing and authentication to the formal CLI")
+	}
+	frontmatter := strings.SplitN(skill, "---", 3)
+	if len(frontmatter) != 3 || !strings.Contains(frontmatter[1], purchaseURL) {
+		t.Fatalf("Skill description does not include the paid purchase URL %s", purchaseURL)
 	}
 	if !strings.Contains(skill, "xparse-cli --profile workbuddy parse") {
 		t.Fatal("WorkBuddy Skill does not select the isolated WorkBuddy profile")
@@ -848,6 +1009,16 @@ func TestSkillUsesFormalCLIWithoutCredentialCollection(t *testing.T) {
 	if !strings.Contains(skill, "xparse-cli --profile workbuddy parse <INPUT> --api free") ||
 		!strings.Contains(skill, "Use `--api paid` only when the user explicitly asks") {
 		t.Fatal("WorkBuddy Skill does not default parsing to the free API")
+	}
+	for _, taskContextContract := range []string{
+		"xparse_task_context.v1",
+		"--task-context <FILE>",
+		"only to the first xParse command",
+		"do not put the JSON content in shell arguments",
+	} {
+		if !strings.Contains(skill, taskContextContract) {
+			t.Fatalf("WorkBuddy Skill is missing task context contract %q", taskContextContract)
+		}
 	}
 	docTools := string(readRepositoryFile(t, "skills", "xparse-doc-tools", "SKILL.md"))
 	if !strings.Contains(docTools, "xparse-cli --profile workbuddy") {
@@ -875,6 +1046,9 @@ func TestSkillUsesFormalCLIWithoutCredentialCollection(t *testing.T) {
 	apiReference := string(readRepositoryFile(
 		t, "skills", "xparse-parse", "references", "api-reference.md",
 	))
+	keySetup := string(readRepositoryFile(
+		t, "skills", "xparse-parse", "references", "textin-key-setup.md",
+	))
 	if !strings.Contains(cliGuidance, "Always use the anonymous free API") ||
 		!strings.Contains(cliGuidance, "Compatibility alias for `free`") ||
 		!strings.Contains(authentication, "authentication alone never changes") &&
@@ -887,13 +1061,13 @@ func TestSkillUsesFormalCLIWithoutCredentialCollection(t *testing.T) {
 			t.Fatal("Skill error guidance does not require explicit paid approval")
 		}
 	}
-	const purchaseURL = "https://www.textin.com/market/chager/pdf_to_markdown"
 	for _, document := range []struct {
 		name    string
 		content string
 	}{
 		{name: "error handling", content: errorHandling},
 		{name: "API reference", content: apiReference},
+		{name: "AppKey setup", content: keySetup},
 	} {
 		if !strings.Contains(document.content, purchaseURL) {
 			t.Fatalf("Skill %s does not direct insufficient-balance users to %s", document.name, purchaseURL)

@@ -1,7 +1,10 @@
 #!/bin/sh
 set -eu
 
-VERSION="${XPARSER_VERSION:-v2.1.0-workbuddy-pre.1}"
+VERSION="${XPARSER_VERSION:-v2.2.0-workbuddy-test.3}"
+EXPECTED_AUTH_DOMAIN="${XPARSE_EXPECTED_AUTH_DOMAIN:-textin-sandbox.intsig.com}"
+PROFILE_BASE_URL="${XPARSE_PROFILE_BASE_URL:-https://textin-sandbox.intsig.com}"
+ENVIRONMENT_LABEL="${XPARSE_ENVIRONMENT_LABEL:-test}"
 DOWNLOAD_BASE="${XPARSER_DOWNLOAD_BASE:-https://dllf.intsig.net/download/2026/Solution/xparse-cli}"
 MARKETPLACE_ROOT="${WORKBUDDY_MARKETPLACE_ROOT:-${HOME}/.workbuddy/connectors-marketplace}"
 CATALOG_FILE="${WORKBUDDY_CONNECTOR_CATALOG:-${MARKETPLACE_ROOT}/.codebuddy-connector/connectors.json}"
@@ -74,17 +77,17 @@ rm -f "${STAGE_DIR}/xparse-parse.zip"
 
 grep -q '"XPARSE_OAUTH_CLIENT_ID"[[:space:]]*:[[:space:]]*"cli_textin_xparse_workbuddy"' \
   "${STAGE_DIR}/cli.json" ||
-  fail "下载的 CLI 配置不是预期的 WorkBuddy pre 配置。"
-grep -q '"authUrlDomain"[[:space:]]*:[[:space:]]*"textin-api-pre.intsig.com"' \
+  fail "下载的 CLI 配置不是预期的 WorkBuddy test 配置。"
+grep -q "\"authUrlDomain\"[[:space:]]*:[[:space:]]*\"${EXPECTED_AUTH_DOMAIN}\"" \
   "${STAGE_DIR}/cli.json" ||
-  fail "下载的 CLI 配置没有指向 TextIn pre 环境。"
+  fail "下载的 CLI 配置没有指向 TextIn ${ENVIRONMENT_LABEL} 环境。"
 grep -q '"source"[[:space:]]*:[[:space:]]*"textin-xparse"' \
   "${STAGE_DIR}/connector-meta.json" ||
   fail "下载的 Connector 元数据无效。"
 grep -q '"id"[[:space:]]*:[[:space:]]*"textin-xparse"' "${ENTRY_DOWNLOAD}" ||
   fail "下载的 marketplace 注册项无效。"
 if grep -q '/latest/' "${STAGE_DIR}/cli.json"; then
-  fail "pre 配置不能引用 latest 目录。"
+  fail "${ENVIRONMENT_LABEL} 配置不能引用 latest 目录。"
 fi
 if command -v sha256sum >/dev/null 2>&1; then
   ICON_SHA256="$(sha256sum "${STAGE_DIR}/icon.png" | awk '{print $1}')"
@@ -100,7 +103,7 @@ if [ ! -f "${STAGE_DIR}/skills/xparse-parse/SKILL.md" ]; then
   fail "下载的 Connector Skill 不完整：缺少 xparse-parse/SKILL.md。"
 fi
 if [ -e "${STAGE_DIR}/skills/xparse-doc-tools" ]; then
-  fail "pre Connector 只能包含 xparse-parse Skill。"
+  fail "test Connector 只能包含 xparse-parse Skill。"
 fi
 
 printf '%s\n' "${VERSION}" > "${STAGE_DIR}/.workbuddy-test"
@@ -143,7 +146,7 @@ if [ -f "${MARKER_FILE}" ]; then
     find "${ACTIVE_REFRESH}" -depth -delete
   fi
   mv "${STAGE_DIR}/.workbuddy-test" "${MARKER_FILE}"
-  printf 'WorkBuddy 已安装 TextIn xParse pre Connector，文件已刷新。\n'
+  printf 'WorkBuddy 已安装 TextIn xParse test Connector，文件已刷新。\n'
 else
   for backup in \
     "${CATALOG_BACKUP}" \
@@ -218,9 +221,23 @@ PYTHON
   cp "${CONNECTOR_DIR}/icon.png" "${MARKETPLACE_ICON}"
   mkdir -p "$(dirname "${ACTIVE_SKILLS_DIR}")"
   cp -R "${CONNECTOR_DIR}/skills" "${ACTIVE_SKILLS_DIR}"
-  printf '已注入 TextIn xParse pre Connector，并备份执行前的 WorkBuddy 状态。\n'
+  printf '已注入 TextIn xParse test Connector，并备份执行前的 WorkBuddy 状态。\n'
+fi
+
+if [ -z "${XPARSE_TEST_ASSET_DIR:-}" ]; then
+  INSTALLER_URL="${DOWNLOAD_BASE}/${VERSION}/install.sh"
+  printf '正在安装 %s CLI：%s\n' "${ENVIRONMENT_LABEL}" "${INSTALLER_URL}"
+  curl -fsSL "${INSTALLER_URL}" |
+    env XPARSER_VERSION="${VERSION}" \
+      XPARSER_BASE_URL="${DOWNLOAD_BASE}" \
+      INSTALL_DIR="$(dirname "${CLI_PATH}")" sh
+  if [ ! -x "${CLI_PATH}" ]; then
+    fail "CLI 安装失败：未找到 ${CLI_PATH}。请执行恢复脚本。"
+  fi
+  "${CLI_PATH}" --profile workbuddy config set base_url "${PROFILE_BASE_URL}" ||
+    fail "CLI 无法写入 ${ENVIRONMENT_LABEL} Profile。请执行恢复脚本。"
 fi
 
 printf '\n请完全退出并重新打开 WorkBuddy，然后在 TextIn xParse 中点击“连接”。\n'
-printf 'WorkBuddy 将安装唯一的 xparse-parse Skill、指定 pre 版 CLI，并打开 TextIn pre 环境授权页。\n'
+printf 'WorkBuddy 将安装唯一的 xparse-parse Skill、指定 %s 版 CLI，并打开 TextIn %s 环境授权页。\n' "${ENVIRONMENT_LABEL}" "${ENVIRONMENT_LABEL}"
 printf '测试结束后请运行 restore-workbuddy-production.sh 恢复执行前状态。\n'

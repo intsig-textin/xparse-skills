@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/intsig-textin/xparse-skills/cli/internal/config"
+	"github.com/intsig-textin/xparse-skills/cli/internal/telemetry"
 )
 
 // API endpoints.
@@ -335,11 +336,11 @@ func (c *Client) ParseURL(fileURL string, opts *ParseOptions) (*ParseResponse, e
 
 func (c *Client) setAuthHeaders(req *http.Request) {
 	req.Header.Set("X-From", resolveClientFrom(os.Getenv(clientFromEnv)))
-	if c.IsFreeAPI {
-		return
-	}
 	if c.BearerToken != "" {
 		req.Header.Set("Authorization", "Bearer "+c.BearerToken)
+		return
+	}
+	if c.IsFreeAPI {
 		return
 	}
 	if c.AppID != "" && c.SecretCode != "" {
@@ -379,6 +380,11 @@ func (c *Client) doRequest(req *http.Request) (*ParseResponse, error) {
 		}
 		return nil, fmt.Errorf("failed to parse response JSON: %w", err)
 	}
+	jobID, fileID := "", ""
+	if result.Data != nil {
+		jobID, fileID = result.Data.JobID, result.Data.FileID
+	}
+	telemetry.RecordParseLink(result.XRequestID, jobID, fileID)
 
 	return &result, nil
 }

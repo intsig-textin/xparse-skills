@@ -355,10 +355,10 @@ func TestDeviceJSONLAndParseAuthenticationModes(t *testing.T) {
 	}
 	for index, label := range []string{"explicit free", "default", "auto"} {
 		header := parseHeaders[index+2]
-		if header.Get("Authorization") != "" ||
+		if header.Get("Authorization") != "Bearer private-access-token-must-not-leak" ||
 			header.Get("x-ti-app-id") != "" ||
 			header.Get("x-ti-secret-code") != "" {
-			t.Fatalf("%s request has authentication: %v", label, header)
+			t.Fatalf("%s request authentication = %v", label, header)
 		}
 		if got := parsePaths[index+2]; got != freeParseAPIPath {
 			t.Fatalf("%s path = %q, want %q", label, got, freeParseAPIPath)
@@ -371,7 +371,7 @@ func TestDeviceJSONLAndParseAuthenticationModes(t *testing.T) {
 	}
 }
 
-func TestExpiredOAuthRefreshRotatesBeforeParseWithoutAppKeyFallback(t *testing.T) {
+func TestExpiredOAuthRefreshRotatesBeforeFreeParseWithoutAppKeyFallback(t *testing.T) {
 	var mu sync.Mutex
 	refreshRequests := 0
 	parseRequests := 0
@@ -394,7 +394,7 @@ func TestExpiredOAuthRefreshRotatesBeforeParseWithoutAppKeyFallback(t *testing.T
 				"access_token": "rotated-access-private", "refresh_token": "rotated-refresh-private",
 				"token_type": "Bearer", "expires_in": 900, "scope": "ocr:*",
 			})
-		case paidParseAPIPath:
+		case freeParseAPIPath:
 			mu.Lock()
 			parseRequests++
 			parseHeader = request.Header.Clone()
@@ -432,7 +432,7 @@ func TestExpiredOAuthRefreshRotatesBeforeParseWithoutAppKeyFallback(t *testing.T
 		"XPARSE_SECRET_CODE": "fallback-secret-must-not-be-used",
 	}
 	result := runCLIHelperEnv(t, home,
-		"parse --api paid --auth-method oauth --view json "+sample,
+		"parse --api free --view json "+sample,
 		"", environment)
 	if result.err != nil {
 		t.Fatalf("parse failed: %v\nstdout:%s\nstderr:%s", result.err, result.stdout, result.stderr)
@@ -552,9 +552,10 @@ func TestBrowserPKCETokenParsesWithBearer(t *testing.T) {
 	}
 }
 
-func TestOAuthRefreshFailureNeverFallsBackToAppKey(t *testing.T) {
+func TestOAuthRefreshFailureOnFreeParseFallsBackToAnonymous(t *testing.T) {
 	refreshRequests := 0
 	parseRequests := 0
+	var parseHeader http.Header
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/oauth21/token":
@@ -562,9 +563,12 @@ func TestOAuthRefreshFailureNeverFallsBackToAppKey(t *testing.T) {
 			writer.Header().Set("Content-Type", "application/json")
 			writer.WriteHeader(http.StatusBadRequest)
 			_, _ = writer.Write([]byte(`{"error":"invalid_grant","error_description":"expired"}`))
-		case paidParseAPIPath:
+		case freeParseAPIPath:
 			parseRequests++
-			t.Errorf("parse must not run after OAuth refresh failure")
+			parseHeader = request.Header.Clone()
+			writeJSON(t, writer, map[string]any{
+				"code": 200, "message": "success", "data": map[string]any{"markdown": "anonymous parsed"},
+			})
 		default:
 			http.NotFound(writer, request)
 		}
@@ -586,7 +590,7 @@ func TestOAuthRefreshFailureNeverFallsBackToAppKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runCLIHelperEnv(t, home,
-		"parse --api paid --auth-method oauth --view json "+sample,
+		"parse --api free --view json "+sample,
 		"", map[string]string{
 			"XPARSE_CONFIG_DIR":      configDir,
 			"XPARSE_BASE_URL":        server.URL,
@@ -594,14 +598,76 @@ func TestOAuthRefreshFailureNeverFallsBackToAppKey(t *testing.T) {
 			"XPARSE_APP_ID":          "fallback-app",
 			"XPARSE_SECRET_CODE":     "fallback-secret",
 		})
+	if result.err != nil {
+		t.Fatalf("anonymous fallback failed: %v\nstdout:%s\nstderr:%s",
+			result.err, result.stdout, result.stderr)
+	}
+	if refreshRequests != 1 || parseRequests != 1 {
+		t.Fatalf("refresh=%d parse=%d", refreshRequests, parseRequests)
+	}
+	if parseHeader.Get("Authorization") != "" ||
+		parseHeader.Get("x-ti-app-id") != "" ||
+		parseHeader.Get("x-ti-secret-code") != "" {
+		t.Fatalf("anonymous fallback headers = %v", parseHeader)
+	}
+	if !strings.Contains(result.stderr,
+		"OAuth refresh failed; continuing with anonymous free parse") {
+		t.Fatalf("fallback warning missing: %q", result.stderr)
+	}
+	if strings.Contains(result.stdout+result.stderr, "fallback-secret") ||
+		strings.Contains(result.stdout+result.stderr, "expired-refresh") {
+		t.Fatalf("credential leaked\nstdout:%s\nstderr:%s", result.stdout, result.stderr)
+	}
+}
+
+func TestOAuthRefreshFailureOnPaidParseStillFails(t *testing.T) {
+	refreshRequests := 0
+	parseRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/oauth21/token":
+			refreshRequests++
+			writer.Header().Set("Content-Type", "application/json")
+			writer.WriteHeader(http.StatusBadRequest)
+			_, _ = writer.Write([]byte(`{"error":"invalid_grant","error_description":"expired"}`))
+		case paidParseAPIPath:
+			parseRequests++
+			t.Errorf("paid parse must not run after OAuth refresh failure")
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	configDir := filepath.Join(home, "isolated")
+	store := &credential.Store{Path: filepath.Join(configDir, "oauth-token.json")}
+	if err := store.Save(&credential.OAuthToken{
+		AccessToken:      "expired-paid-access",
+		RefreshToken:     "expired-paid-refresh",
+		ExpiresAt:        time.Now().Add(-time.Minute),
+		RefreshExpiresAt: time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sample := filepath.Join(home, "sample.pdf")
+	if err := os.WriteFile(sample, []byte("%PDF-fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := runCLIHelperEnv(t, home,
+		"parse --api paid --auth-method oauth --view json "+sample,
+		"", map[string]string{
+			"XPARSE_CONFIG_DIR":      configDir,
+			"XPARSE_BASE_URL":        server.URL,
+			"XPARSE_OAUTH_CLIENT_ID": "fixture-client",
+		})
 	if result.err == nil {
-		t.Fatalf("OAuth refresh failure unexpectedly succeeded")
+		t.Fatal("paid OAuth refresh failure unexpectedly succeeded")
 	}
 	if refreshRequests != 1 || parseRequests != 0 {
 		t.Fatalf("refresh=%d parse=%d", refreshRequests, parseRequests)
 	}
-	if strings.Contains(result.stdout+result.stderr, "fallback-secret") ||
-		strings.Contains(result.stdout+result.stderr, "expired-refresh") {
+	if strings.Contains(result.stdout+result.stderr, "expired-paid-refresh") {
 		t.Fatalf("credential leaked\nstdout:%s\nstderr:%s", result.stdout, result.stderr)
 	}
 }
