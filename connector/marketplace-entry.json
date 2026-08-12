@@ -7,6 +7,7 @@
   "description_en": "Parse PDFs, images, Word, Excel, PowerPoint, scanned documents, and more into Markdown or structured JSON from the command line. Preserve document hierarchies and complex table structures for high-accuracy, high-performance document processing. Parse up to 1,000 pages free each day.",
   "source": "textin-xparse",
   "type": "cli",
+  "minWorkbuddyVersion": "5.0.0",
   "examples_zh": [
     "解析并总结这份 PDF 的核心内容：https://web-api.textin.com/image/download?filename=4249da45f6e946d2afd8380d59.pdf"
   ],

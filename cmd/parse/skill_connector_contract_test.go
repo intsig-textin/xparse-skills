@@ -66,10 +66,10 @@ func TestWorkBuddyConnectorCommandAndExtractionContract(t *testing.T) {
 			t.Fatalf("platform %q auth command is not native Device Flow: %q",
 				platform, contract.Auth[platform])
 		}
-		if !strings.Contains(contract.Init[platform], "/v2.2.0/") ||
+		if !strings.Contains(contract.Init[platform], "/v2.2.1/") ||
 			!strings.Contains(contract.Init[platform],
 				"--profile workbuddy config set base_url https://api.textin.com") {
-			t.Fatalf("platform %q production init is not pinned to 2.2.0: %q",
+			t.Fatalf("platform %q production init is not pinned to 2.2.1: %q",
 				platform, contract.Init[platform])
 		}
 		for _, command := range []string{
@@ -139,8 +139,8 @@ func TestWorkBuddyConnectorCommandAndExtractionContract(t *testing.T) {
 	}
 
 	versionPattern := regexp.MustCompile(contract.VersionCheck.VersionPattern)
-	if !versionPattern.MatchString("xparse-cli version 2.2.0") ||
-		contract.VersionCheck.MinVersion != "2.2.0" {
+	if !versionPattern.MatchString("xparse-cli version 2.2.1") ||
+		contract.VersionCheck.MinVersion != "2.2.1" {
 		t.Fatalf("invalid version contract: %#v", contract.VersionCheck)
 	}
 	for _, legacy := range []string{"1.0.4", "2.0.3"} {
