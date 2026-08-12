@@ -300,9 +300,7 @@ func TestDeviceJSONLAndParseAuthenticationModes(t *testing.T) {
 	}
 
 	sample := filepath.Join(home, "sample.pdf")
-	if err := os.WriteFile(sample, []byte("%PDF-fixture"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeValidPDF(t, sample)
 	oauthParse := runCLIHelperEnv(t, home,
 		"parse --api paid --auth-method oauth --view json "+sample,
 		"", environment)
@@ -422,9 +420,7 @@ func TestExpiredOAuthRefreshRotatesBeforeFreeParseWithoutAppKeyFallback(t *testi
 		t.Fatal(err)
 	}
 	sample := filepath.Join(home, "sample.pdf")
-	if err := os.WriteFile(sample, []byte("%PDF-fixture"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeValidPDF(t, sample)
 	environment := map[string]string{
 		"XPARSE_CONFIG_DIR":  configDir,
 		"XPARSE_BASE_URL":    server.URL,
@@ -528,9 +524,7 @@ func TestBrowserPKCETokenParsesWithBearer(t *testing.T) {
 		t.Fatal(err)
 	}
 	sample := filepath.Join(t.TempDir(), "browser.pdf")
-	if err := os.WriteFile(sample, []byte("%PDF-browser"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeValidPDF(t, sample)
 	client := &XParserClient{
 		BearerToken: token.AccessToken,
 		BaseURL:     server.URL,
@@ -586,9 +580,7 @@ func TestOAuthRefreshFailureOnFreeParseFallsBackToAnonymous(t *testing.T) {
 		t.Fatal(err)
 	}
 	sample := filepath.Join(home, "sample.pdf")
-	if err := os.WriteFile(sample, []byte("%PDF-fixture"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeValidPDF(t, sample)
 	result := runCLIHelperEnv(t, home,
 		"parse --api free --view json "+sample,
 		"", map[string]string{
@@ -651,9 +643,7 @@ func TestOAuthRefreshFailureOnPaidParseStillFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	sample := filepath.Join(home, "sample.pdf")
-	if err := os.WriteFile(sample, []byte("%PDF-fixture"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeValidPDF(t, sample)
 	result := runCLIHelperEnv(t, home,
 		"parse --api paid --auth-method oauth --view json "+sample,
 		"", map[string]string{
@@ -813,6 +803,35 @@ func writeJSON(t *testing.T, writer http.ResponseWriter, value any) {
 	writer.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(writer).Encode(value); err != nil {
 		t.Error(err)
+	}
+}
+
+func writeValidPDF(t *testing.T, path string) {
+	t.Helper()
+	var document bytes.Buffer
+	document.WriteString("%PDF-1.4\n")
+	offsets := make([]int, 4)
+	objects := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+	}
+	for index, object := range objects {
+		offsets[index+1] = document.Len()
+		fmt.Fprintf(&document, "%d 0 obj\n%s\nendobj\n", index+1, object)
+	}
+	xrefOffset := document.Len()
+	document.WriteString("xref\n0 4\n0000000000 65535 f \n")
+	for index := 1; index <= 3; index++ {
+		fmt.Fprintf(&document, "%010d 00000 n \n", offsets[index])
+	}
+	fmt.Fprintf(
+		&document,
+		"trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n",
+		xrefOffset,
+	)
+	if err := os.WriteFile(path, document.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 
 	"gitlab.intsig.net/xparse/xparse-client/internal/config"
 	"gitlab.intsig.net/xparse/xparse-client/internal/exitcode"
+	"gitlab.intsig.net/xparse/xparse-client/internal/preflight"
 	"gitlab.intsig.net/xparse/xparse-client/internal/telemetry"
 )
 
@@ -166,14 +168,9 @@ func runParse(cmd *cobra.Command, args []string) error {
 			"[fix] provide a file path, URL, or use --list <file>")
 	}
 
-	// Validate file existence early
-	for _, src := range sources {
-		if !isURL(src) {
-			if _, err := os.Stat(src); os.IsNotExist(err) {
-				return generalErr(exitcode.ErrFileNotFound+": "+src,
-					"[ask human] verify "+src+" exists and is accessible")
-			}
-		}
+	// Reject deterministic local and URL failures before credentials or HTTP.
+	if _, err := preflightSources(sources); err != nil {
+		return err
 	}
 
 	// --list requires --output
@@ -246,6 +243,49 @@ func runParse(cmd *cobra.Command, args []string) error {
 		return runSingleParse(client, sources[0], opts)
 	}
 	return runBatchParse(client, sources, opts)
+}
+
+func preflightSources(sources []string) ([]*preflight.Spec, *exitError) {
+	specs := make([]*preflight.Spec, 0, len(sources))
+	for _, source := range sources {
+		spec, err := preflight.Inspect(source)
+		if err == nil {
+			specs = append(specs, spec)
+			continue
+		}
+		var inspectErr *preflight.Error
+		if !errors.As(err, &inspectErr) {
+			return nil, generalErr("PREFLIGHT_FAILED: input inspection failed",
+				"[ask human] verify the input file or URL")
+		}
+		message := inspectErr.Error()
+		if inspectErr.Code != preflight.CodeInvalidURL {
+			message += ": " + source
+		}
+		return nil, generalErr(message, preflightSuggestion(inspectErr.Code, source))
+	}
+	return specs, nil
+}
+
+func preflightSuggestion(code, source string) string {
+	switch code {
+	case preflight.CodeFileNotFound:
+		return "[ask human] verify " + source + " exists"
+	case preflight.CodeFileNotReadable:
+		return "[ask human] grant read permission for " + source
+	case preflight.CodeEmptyFile:
+		return "[ask human] provide a non-empty document"
+	case preflight.CodeUnsupportedFileType:
+		return "[ask human] provide a supported PDF, image, Office, HTML, TXT, OFD, or RTF file"
+	case preflight.CodeInvalidPDF:
+		return "[ask human] provide a valid, non-corrupt PDF"
+	case preflight.CodePasswordRequired:
+		return "[ask human] provide the PDF password with --password"
+	case preflight.CodeInvalidURL:
+		return "[fix] use a public HTTPS URL without embedded credentials"
+	default:
+		return "[ask human] verify the input before retrying"
+	}
 }
 
 func summarizeParseTelemetry(_ *cobra.Command, args []string) telemetry.CommandSummary {
