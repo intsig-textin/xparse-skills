@@ -11,13 +11,17 @@ import (
 
 // Type aliases — re-export from internal/client so existing parse code compiles unchanged.
 type (
-	APIMode       = client.APIMode
-	XParserClient = client.Client
-	ParseOptions  = client.ParseOptions
-	ParseResponse = client.ParseResponse
-	ParseData     = client.ParseData
-	ParseMetadata = client.ParseMetadata
-	Summary       = client.Summary
+	APIMode                  = client.APIMode
+	XParserClient            = client.Client
+	ParseOptions             = client.ParseOptions
+	ParseResponse            = client.ParseResponse
+	ParseData                = client.ParseData
+	ParseMetadata            = client.ParseMetadata
+	Summary                  = client.Summary
+	CapabilityResolveRequest = client.CapabilityResolveRequest
+	CapabilityFileSpec       = client.CapabilityFileSpec
+	ParseCapabilitySnapshot  = client.ParseCapabilitySnapshot
+	CapabilityChannel        = client.CapabilityChannel
 )
 
 const (
@@ -25,8 +29,9 @@ const (
 	APIModeFree APIMode = client.APIModeFree
 	APIModePaid APIMode = client.APIModePaid
 
-	paidParseAPIPath = client.PaidParseAPIPath
-	freeParseAPIPath = client.FreeParseAPIPath
+	paidParseAPIPath         = client.PaidParseAPIPath
+	freeParseAPIPath         = client.FreeParseAPIPath
+	capabilityResolveAPIPath = client.CapabilityResolveAPIPath
 )
 
 // resolveAPIMode determines whether to use free or paid API.

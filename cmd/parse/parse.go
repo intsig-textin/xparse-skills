@@ -169,8 +169,9 @@ func runParse(cmd *cobra.Command, args []string) error {
 	}
 
 	// Reject deterministic local and URL failures before credentials or HTTP.
-	if _, err := preflightSources(sources); err != nil {
-		return err
+	sourceSpecs, preflightErr := preflightSources(sources)
+	if preflightErr != nil {
+		return preflightErr
 	}
 
 	// --list requires --output
@@ -238,11 +239,99 @@ func runParse(cmd *cobra.Command, args []string) error {
 		IncludeTitleTree:      includeTitleTree,
 		TableView:             parseTableView,
 	}
+	if parseAPI == "auto" {
+		if err := resolveAutomaticCapabilities(cmd, client, sourceSpecs); err != nil {
+			return err
+		}
+	}
 
 	if len(sources) == 1 {
 		return runSingleParse(client, sources[0], opts)
 	}
 	return runBatchParse(client, sources, opts)
+}
+
+func resolveAutomaticCapabilities(
+	cmd *cobra.Command,
+	client *XParserClient,
+	specs []*preflight.Spec,
+) *exitError {
+	for _, spec := range specs {
+		response, err := client.ResolveCapability(
+			cmd.Context(),
+			&CapabilityResolveRequest{
+				ClientVersion: version,
+				Profile:       config.Profile(),
+				RequestedAPI:  "auto",
+				File: CapabilityFileSpec{
+					SourceType:   spec.SourceType,
+					DetectedType: spec.DetectedType,
+					SizeBytes:    spec.SizeBytes,
+					PageCount:    spec.PageCount,
+				},
+			},
+		)
+		if err != nil {
+			return capabilityErr(
+				"CAPABILITY_QUERY_FAILED",
+				"Unable to resolve current parsing capability.",
+				"",
+			)
+		}
+		if response.Code != 200 {
+			return apiErr(response.Code, response.Message, response.XRequestID)
+		}
+		if response.Data == nil || response.Data.SnapshotVersion != "parse-capability.v1" {
+			return capabilityErr(
+				"CAPABILITY_QUERY_FAILED",
+				"The capability service returned an invalid snapshot.",
+				response.XRequestID,
+			)
+		}
+		if err := validateAutomaticChannel(response.Data, spec); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateAutomaticChannel(
+	snapshot *ParseCapabilitySnapshot,
+	spec *preflight.Spec,
+) *exitError {
+	nextAction := "PAID_QUOTA_REQUIRED"
+	if snapshot.NextAction != nil && *snapshot.NextAction != "" {
+		nextAction = *snapshot.NextAction
+	}
+	if !snapshot.Supported {
+		return capabilityErr(nextAction, "No automatically usable parsing channel is available.", snapshot.RequestID)
+	}
+	for _, channel := range snapshot.Channels {
+		if channel.ID != "free" || !channel.Available ||
+			!channel.AutomaticUseAllowed || channel.RequiresUserConfirmation ||
+			channel.CreatesNewCharge {
+			continue
+		}
+		if spec.SourceType == preflight.SourceLocal &&
+			(spec.PageCount > channel.MaxPagesPerRequest ||
+				spec.SizeBytes > channel.MaxFileSizeBytes) {
+			return capabilityErr(
+				"SPLIT_REQUIRED",
+				"The document is supported but requires the segmented parse planner.",
+				snapshot.RequestID,
+			)
+		}
+		return nil
+	}
+	return capabilityErr(nextAction, "No automatically usable free channel is available.", snapshot.RequestID)
+}
+
+func capabilityErr(code, message, requestID string) *exitError {
+	fmt.Fprintf(os.Stderr, "%s: %s\n", code, message)
+	if requestID != "" {
+		fmt.Fprintf(os.Stderr, "  (request_id: %s)\n", requestID)
+	}
+	return &exitError{code: exitcode.APIError, msg: code}
 }
 
 func preflightSources(sources []string) ([]*preflight.Spec, *exitError) {

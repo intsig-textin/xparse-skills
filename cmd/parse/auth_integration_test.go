@@ -234,6 +234,27 @@ func TestDeviceJSONLAndParseAuthenticationModes(t *testing.T) {
 				"expires_in":    900,
 				"scope":         "ocr:*",
 			})
+		case capabilityResolveAPIPath:
+			writeJSON(t, writer, map[string]any{
+				"code":    200,
+				"message": "success",
+				"data": map[string]any{
+					"snapshot_version":          "parse-capability.v1",
+					"supported":                 true,
+					"server_preflight_required": false,
+					"channels": []map[string]any{{
+						"id":                         "free",
+						"available":                  true,
+						"automatic_use_allowed":      true,
+						"requires_user_confirmation": false,
+						"creates_new_charge":         false,
+						"remaining_pages":            500,
+						"max_pages_per_request":      50,
+						"max_file_size_bytes":        10 * 1024 * 1024,
+						"max_parallel_requests":      2,
+					}},
+				},
+			})
 		case paidParseAPIPath, freeParseAPIPath:
 			mu.Lock()
 			parseHeaders = append(parseHeaders, request.Header.Clone())
