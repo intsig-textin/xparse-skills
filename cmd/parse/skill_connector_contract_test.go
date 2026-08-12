@@ -1154,9 +1154,19 @@ func TestSkillUsesFormalCLIWithoutCredentialCollection(t *testing.T) {
 			t.Fatalf("WorkBuddy Skill is missing task context contract %q", taskContextContract)
 		}
 	}
-	docTools := string(readRepositoryFile(t, "skills", "xparse-doc-tools", "SKILL.md"))
-	if !strings.Contains(docTools, "xparse-cli --profile workbuddy") {
-		t.Fatal("WorkBuddy document tools do not select the isolated WorkBuddy profile")
+	navigation := string(readRepositoryFile(
+		t, "skills", "xparse-parse", "references", "navigation.md",
+	))
+	if !strings.Contains(skill, "references/navigation.md") ||
+		!strings.Contains(navigation, "get_doc_info") ||
+		!strings.Contains(navigation, "get_outline") ||
+		!strings.Contains(navigation, "search_text") ||
+		!strings.Contains(navigation, "read_content") ||
+		!strings.Contains(navigation, "Plan-then-Batch") {
+		t.Fatal("merged Skill does not include the targeted-reading navigation contract")
+	}
+	if strings.Contains(navigation, "ensure_parsed") {
+		t.Fatal("merged Skill still generates the deprecated ensure_parsed workflow")
 	}
 	for _, forbidden := range []string{
 		"curl -H \"Authorization:",

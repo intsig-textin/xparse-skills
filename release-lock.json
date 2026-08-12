@@ -2,6 +2,6 @@
   "client_version": "2.2.1",
   "skills_repository": "https://github.com/intsig-textin/xparse-skills.git",
   "skills_ref": "feat/merge-xparse-skills-v2.2.1",
-  "skills_commit": "6781baff8fd16e4e0afd677622ac5125b5e9a42f",
+  "skills_commit": "cb86a4e82eff5b1a478a124181d689532792aa6b",
   "skill_path": "skills/xparse-parse"
 }
