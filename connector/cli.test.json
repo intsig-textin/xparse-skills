@@ -5,19 +5,19 @@
     "win32": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:XPARSER_VERSION='v2.2.0-workbuddy-test.3'; irm https://dllf.intsig.net/download/2026/Solution/xparse-cli/v2.2.0-workbuddy-test.3/install.ps1 | iex; & \\\"$env:USERPROFILE\\.xparse-cli\\bin\\xparse-cli.exe\\\" --profile workbuddy config set base_url https://textin-sandbox.intsig.com\""
   },
   "auth": {
-    "darwin": "\"$HOME/.local/bin/xparse-cli\" --profile workbuddy auth device --open-browser=always --output=jsonl",
-    "linux": "\"$HOME/.local/bin/xparse-cli\" --profile workbuddy auth device --open-browser=always --output=jsonl",
-    "win32": "\"%USERPROFILE%\\.xparse-cli\\bin\\xparse-cli.exe\" --profile workbuddy auth device --open-browser=always --output=jsonl"
+    "darwin": "xparse-cli --profile workbuddy auth device --open-browser=always --output=jsonl",
+    "linux": "xparse-cli --profile workbuddy auth device --open-browser=always --output=jsonl",
+    "win32": "xparse-cli --profile workbuddy auth device --open-browser=always --output=jsonl"
   },
   "unAuth": {
-    "darwin": "\"$HOME/.local/bin/xparse-cli\" --profile workbuddy auth logout --method oauth",
-    "linux": "\"$HOME/.local/bin/xparse-cli\" --profile workbuddy auth logout --method oauth",
-    "win32": "\"%USERPROFILE%\\.xparse-cli\\bin\\xparse-cli.exe\" --profile workbuddy auth logout --method oauth"
+    "darwin": "xparse-cli --profile workbuddy auth logout --method oauth",
+    "linux": "xparse-cli --profile workbuddy auth logout --method oauth",
+    "win32": "xparse-cli --profile workbuddy auth logout --method oauth"
   },
   "status": {
-    "darwin": "\"$HOME/.local/bin/xparse-cli\" --profile workbuddy auth status --output=json",
-    "linux": "\"$HOME/.local/bin/xparse-cli\" --profile workbuddy auth status --output=json",
-    "win32": "\"%USERPROFILE%\\.xparse-cli\\bin\\xparse-cli.exe\" --profile workbuddy auth status --output=json"
+    "darwin": "xparse-cli --profile workbuddy auth status --output=json",
+    "linux": "xparse-cli --profile workbuddy auth status --output=json",
+    "win32": "xparse-cli --profile workbuddy auth status --output=json"
   },
   "statusMatchJson": {
     "logged_in": "true",
@@ -29,9 +29,9 @@
   },
   "versionCheck": {
     "command": {
-      "darwin": "\"$HOME/.local/bin/xparse-cli\" version",
-      "linux": "\"$HOME/.local/bin/xparse-cli\" version",
-      "win32": "\"%USERPROFILE%\\.xparse-cli\\bin\\xparse-cli.exe\" version"
+      "darwin": "xparse-cli version",
+      "linux": "xparse-cli version",
+      "win32": "xparse-cli version"
     },
     "minVersion": "2.2.0",
     "versionPattern": "xparse-cli version v?(\\d+\\.\\d+\\.\\d+)"

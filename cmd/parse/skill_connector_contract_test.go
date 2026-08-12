@@ -83,16 +83,6 @@ func TestWorkBuddyConnectorCommandAndExtractionContract(t *testing.T) {
 			}
 		}
 	}
-	for _, command := range []string{
-		contract.Auth["win32"],
-		contract.UnAuth["win32"],
-		contract.Status["win32"],
-		contract.VersionCheck.Command["win32"],
-	} {
-		if !strings.Contains(command, `%USERPROFILE%\.xparse-cli\bin\xparse-cli.exe`) {
-			t.Fatalf("Windows command does not use the installer destination: %q", command)
-		}
-	}
 	if contract.AuthURLDomain != "api.textin.com" {
 		t.Fatalf("authUrlDomain = %q", contract.AuthURLDomain)
 	}
@@ -165,6 +155,35 @@ func TestWorkBuddyConnectorCommandAndExtractionContract(t *testing.T) {
 	if contract.AuthDeviceFlow.DefaultExpiresInSeconds != 240 ||
 		!contract.AuthDeviceFlow.CodeEmbeddedInURI {
 		t.Fatalf("authDeviceFlow = %#v", contract.AuthDeviceFlow)
+	}
+}
+
+func TestWorkBuddyDomesticLifecycleCommandsUsePATH(t *testing.T) {
+	for _, configName := range []string{"cli.json", "cli.pre.json", "cli.test.json"} {
+		data := readRepositoryFile(t, "connector", configName)
+		var contract connectorCLIContract
+		if err := json.Unmarshal(data, &contract); err != nil {
+			t.Fatal(err)
+		}
+		for _, platform := range []string{"darwin", "linux", "win32"} {
+			for commandName, command := range map[string]string{
+				"auth":         contract.Auth[platform],
+				"unAuth":       contract.UnAuth[platform],
+				"status":       contract.Status[platform],
+				"versionCheck": contract.VersionCheck.Command[platform],
+			} {
+				if command != "xparse-cli version" &&
+					!strings.HasPrefix(command, "xparse-cli --profile workbuddy ") {
+					t.Fatalf(
+						"%s platform %q %s command is not PATH-based: %q",
+						configName,
+						platform,
+						commandName,
+						command,
+					)
+				}
+			}
+		}
 	}
 }
 
