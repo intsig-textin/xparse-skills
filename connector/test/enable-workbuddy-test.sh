@@ -7,6 +7,9 @@ PROFILE_BASE_URL="${XPARSE_PROFILE_BASE_URL:-https://textin-sandbox.intsig.com}"
 ENVIRONMENT_LABEL="${XPARSE_ENVIRONMENT_LABEL:-test}"
 DOWNLOAD_BASE="${XPARSER_DOWNLOAD_BASE:-https://dllf.intsig.net/download/2026/Solution/xparse-cli}"
 MARKETPLACE_ROOT="${WORKBUDDY_MARKETPLACE_ROOT:-${HOME}/.workbuddy/connectors-marketplace}"
+PRODUCT_ROOT="${WORKBUDDY_PRODUCT_ROOT:-$(dirname "${MARKETPLACE_ROOT}")}"
+ACCOUNT_STATE_ROOT="${WORKBUDDY_ACCOUNT_STATE_ROOT:-${PRODUCT_ROOT}/connectors}"
+ACCOUNT_STATE_BACKUP_SUFFIX=".textin-xparse.production.bak"
 CATALOG_FILE="${WORKBUDDY_CONNECTOR_CATALOG:-${MARKETPLACE_ROOT}/.codebuddy-connector/connectors.json}"
 CONNECTORS_DIR="${WORKBUDDY_CONNECTORS_DIR:-${MARKETPLACE_ROOT}/connectors}"
 CONNECTOR_DIR="${WORKBUDDY_CONNECTOR_DIR:-${CONNECTORS_DIR}/textin-xparse}"
@@ -19,11 +22,12 @@ PROFILE_DIR="${XPARSE_WORKBUDDY_PROFILE_DIR:-${HOME}/.xparse-cli/profiles/workbu
 PROFILE_BACKUP="${PROFILE_DIR}.production.bak"
 CLI_PATH="${XPARSE_CLI_PATH:-${HOME}/.local/bin/xparse-cli}"
 CLI_BACKUP="${CLI_PATH}.production.bak"
-ACTIVE_SKILLS_DIR="${WORKBUDDY_CONNECTOR_SKILLS_DIR:-${HOME}/.workbuddy/connectors/skills/connector-textin-xparse}"
+ACTIVE_SKILLS_DIR="${WORKBUDDY_CONNECTOR_SKILLS_DIR:-${PRODUCT_ROOT}/connectors/skills/connector-textin-xparse}"
 ACTIVE_SKILLS_BACKUP="${ACTIVE_SKILLS_DIR}.production.bak"
 STAGE_DIR="${CONNECTORS_DIR}/.textin-xparse.test-download.$$"
 CATALOG_DOWNLOAD="${CATALOG_FILE}.textin-xparse-test.download.$$"
 ENTRY_DOWNLOAD="${CATALOG_FILE}.textin-xparse-entry.download.$$"
+ACCOUNT_STATE_LIST="${CATALOG_FILE}.textin-xparse-account-states.$$"
 MARKER_FILE="${CONNECTOR_DIR}/.workbuddy-test"
 EXPECTED_ICON_SHA256="2f5159dd77b1d4625d44ab5ac30a4b40417be1280083ae4c86ea674d485c4234"
 
@@ -41,8 +45,79 @@ cleanup() {
   if [ -d "${STAGE_DIR}" ]; then
     find "${STAGE_DIR}" -depth -delete 2>/dev/null || true
   fi
+  if [ -f "${ACCOUNT_STATE_LIST}" ]; then
+    while IFS= read -r state_path; do
+      rm -f "${state_path}.textin-xparse.enable.$$"
+    done < "${ACCOUNT_STATE_LIST}"
+    rm -f "${ACCOUNT_STATE_LIST}"
+  fi
 }
 trap cleanup EXIT
+
+write_enabled_account_state() {
+  state_path="$1"
+  output_path="$2"
+  if command -v ruby >/dev/null 2>&1; then
+    ruby -rjson - "${state_path}" "${output_path}" <<'RUBY'
+state_path, output_path = ARGV
+state = JSON.parse(File.read(state_path, encoding: "UTF-8"))
+enabled = state["enabled"]
+raise "enabled must be an array" unless enabled.is_a?(Array)
+enabled << "textin-xparse" unless enabled.include?("textin-xparse")
+File.write(output_path, JSON.pretty_generate(state) + "\n", mode: "w:UTF-8")
+RUBY
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 - "${state_path}" "${output_path}" <<'PYTHON'
+import json
+import sys
+
+state_path, output_path = sys.argv[1:]
+with open(state_path, encoding="utf-8") as source:
+    state = json.load(source)
+enabled = state.get("enabled")
+if not isinstance(enabled, list):
+    raise ValueError("enabled must be an array")
+if "textin-xparse" not in enabled:
+    enabled.append("textin-xparse")
+with open(output_path, "w", encoding="utf-8") as destination:
+    json.dump(state, destination, ensure_ascii=False, indent=2)
+    destination.write("\n")
+PYTHON
+  else
+    fail "缺少可用的 JSON 解析器，无法启用账号级 Connector。"
+  fi
+}
+
+enable_account_connectors() {
+  if [ ! -d "${ACCOUNT_STATE_ROOT}" ]; then
+    printf '警告：未找到 WorkBuddy 账号状态目录：%s。请登录账号后重新运行。\n' \
+      "${ACCOUNT_STATE_ROOT}" >&2
+    return
+  fi
+  find "${ACCOUNT_STATE_ROOT}" -type f -name 'connector-states.v3.json' -print > \
+    "${ACCOUNT_STATE_LIST}"
+  if [ ! -s "${ACCOUNT_STATE_LIST}" ]; then
+    printf '警告：未找到 WorkBuddy 账号状态文件 connector-states.v3.json。请登录账号后重新运行。\n' >&2
+    return
+  fi
+
+  while IFS= read -r state_path; do
+    output_path="${state_path}.textin-xparse.enable.$$"
+    cp -p "${state_path}" "${output_path}"
+    write_enabled_account_state "${state_path}" "${output_path}" ||
+      fail "账号状态文件无效：${state_path}。未替换任何账号状态。"
+  done < "${ACCOUNT_STATE_LIST}"
+
+  while IFS= read -r state_path; do
+    backup_path="${state_path}${ACCOUNT_STATE_BACKUP_SUFFIX}"
+    output_path="${state_path}.textin-xparse.enable.$$"
+    if [ ! -f "${backup_path}" ]; then
+      cp -p "${state_path}" "${backup_path}"
+    fi
+    mv "${output_path}" "${state_path}"
+  done < "${ACCOUNT_STATE_LIST}"
+  printf '已为当前 WorkBuddy 账号启用 TextIn xParse Connector。\n'
+}
 
 fetch_asset() {
   remote_name="$1"
@@ -159,6 +234,12 @@ else
       fail "检测到未恢复的备份：${backup}。请先运行恢复脚本。"
     fi
   done
+  if [ -d "${ACCOUNT_STATE_ROOT}" ] &&
+    find "${ACCOUNT_STATE_ROOT}" -type f \
+      -name "connector-states.v3.json${ACCOUNT_STATE_BACKUP_SUFFIX}" \
+      -print -quit | grep -q .; then
+    fail "检测到未恢复的账号状态备份。请先运行恢复脚本。"
+  fi
 
   if grep -q '"id"[[:space:]]*:[[:space:]]*"textin-xparse"' "${CATALOG_FILE}"; then
     cp "${CATALOG_FILE}" "${CATALOG_DOWNLOAD}"
@@ -223,6 +304,8 @@ PYTHON
   cp -R "${CONNECTOR_DIR}/skills" "${ACTIVE_SKILLS_DIR}"
   printf '已注入 TextIn xParse test Connector，并备份执行前的 WorkBuddy 状态。\n'
 fi
+
+enable_account_connectors
 
 if [ -z "${XPARSE_TEST_ASSET_DIR:-}" ]; then
   INSTALLER_URL="${DOWNLOAD_BASE}/${VERSION}/install.sh"

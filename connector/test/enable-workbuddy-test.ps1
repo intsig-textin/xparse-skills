@@ -27,6 +27,17 @@ $MarketplaceRoot = if ($env:WORKBUDDY_MARKETPLACE_ROOT) {
 } else {
     Join-Path $UserHome ".workbuddy\connectors-marketplace"
 }
+$ProductRoot = if ($env:WORKBUDDY_PRODUCT_ROOT) {
+    $env:WORKBUDDY_PRODUCT_ROOT
+} else {
+    Split-Path -Parent $MarketplaceRoot
+}
+$AccountStateRoot = if ($env:WORKBUDDY_ACCOUNT_STATE_ROOT) {
+    $env:WORKBUDDY_ACCOUNT_STATE_ROOT
+} else {
+    Join-Path $ProductRoot "connectors"
+}
+$AccountStateBackupSuffix = ".textin-xparse.production.bak"
 $CatalogFile = if ($env:WORKBUDDY_CONNECTOR_CATALOG) {
     $env:WORKBUDDY_CONNECTOR_CATALOG
 } else {
@@ -66,7 +77,7 @@ $CLIBackup = "${CLIPath}.production.bak"
 $ActiveSkillsDir = if ($env:WORKBUDDY_CONNECTOR_SKILLS_DIR) {
     $env:WORKBUDDY_CONNECTOR_SKILLS_DIR
 } else {
-    Join-Path $UserHome ".workbuddy\connectors\skills\connector-textin-xparse"
+    Join-Path $ProductRoot "connectors\skills\connector-textin-xparse"
 }
 $ActiveSkillsBackup = "${ActiveSkillsDir}.production.bak"
 $StageDir = Join-Path $ConnectorsDir ".textin-xparse.test-download.$PID"
@@ -85,6 +96,81 @@ function Read-Utf8Text {
 function Read-Utf8Json {
     param([string]$Path)
     return (Read-Utf8Text $Path | ConvertFrom-Json)
+}
+
+function Get-AccountStateFiles {
+    if (-not (Test-Path -LiteralPath $AccountStateRoot -PathType Container)) {
+        return @()
+    }
+    return @(
+        Get-ChildItem -LiteralPath $AccountStateRoot -Recurse -File |
+            Where-Object { $_.Name -eq "connector-states.v3.json" }
+    )
+}
+
+function Get-AccountStateBackups {
+    if (-not (Test-Path -LiteralPath $AccountStateRoot -PathType Container)) {
+        return @()
+    }
+    return @(
+        Get-ChildItem -LiteralPath $AccountStateRoot -Recurse -File |
+            Where-Object {
+                $_.Name -eq "connector-states.v3.json${AccountStateBackupSuffix}"
+            }
+    )
+}
+
+function Enable-AccountConnectors {
+    $StateFiles = @(Get-AccountStateFiles)
+    if ($StateFiles.Count -eq 0) {
+        Write-Warning "未找到 WorkBuddy 账号状态文件 connector-states.v3.json。请登录账号后重新运行。"
+        return
+    }
+
+    $Pending = @()
+    try {
+        foreach ($StateFile in $StateFiles) {
+            $State = Read-Utf8Json $StateFile.FullName
+            if (
+                -not ($State.PSObject.Properties.Name -contains "enabled") -or
+                -not ($State.enabled -is [System.Array])
+            ) {
+                throw "账号状态文件的 enabled 必须是数组：$($StateFile.FullName)"
+            }
+            $Enabled = @($State.enabled)
+            if (-not ($Enabled -contains "textin-xparse")) {
+                $Enabled += "textin-xparse"
+            }
+            $State.enabled = $Enabled
+            $TemporaryPath = "$($StateFile.FullName).textin-xparse.enable.${PID}"
+            $StateJSON = $State | ConvertTo-Json -Depth 100
+            [System.IO.File]::WriteAllText(
+                $TemporaryPath,
+                "${StateJSON}`n",
+                $UTF8NoBOM
+            )
+            Read-Utf8Json $TemporaryPath | Out-Null
+            $Pending += [PSCustomObject]@{
+                State = $StateFile.FullName
+                Temporary = $TemporaryPath
+            }
+        }
+
+        foreach ($Entry in $Pending) {
+            $BackupPath = "$($Entry.State)${AccountStateBackupSuffix}"
+            if (-not (Test-Path -LiteralPath $BackupPath -PathType Leaf)) {
+                Copy-Item -LiteralPath $Entry.State -Destination $BackupPath
+            }
+            Move-Item -LiteralPath $Entry.Temporary -Destination $Entry.State -Force
+        }
+    } finally {
+        foreach ($Entry in $Pending) {
+            if (Test-Path -LiteralPath $Entry.Temporary -PathType Leaf) {
+                Remove-Item -LiteralPath $Entry.Temporary -Force
+            }
+        }
+    }
+    Write-Host "已为当前 WorkBuddy 账号启用 TextIn xParse Connector。"
 }
 
 function Get-TestAsset {
@@ -243,6 +329,9 @@ try {
                 throw "检测到未恢复的备份：${Backup}。请先运行恢复脚本。"
             }
         }
+        if (@(Get-AccountStateBackups).Count -gt 0) {
+            throw "检测到未恢复的账号状态备份。请先运行恢复脚本。"
+        }
 
         $Catalog = Read-Utf8Json $CatalogFile
         $ExistingEntries = @(
@@ -286,6 +375,7 @@ try {
             -Destination $ActiveSkillsDir -Recurse
         Write-Host "已注入 TextIn xParse test Connector，并备份执行前的 WorkBuddy 状态。"
     }
+    Enable-AccountConnectors
 } finally {
     Clear-TestDownloads
 }

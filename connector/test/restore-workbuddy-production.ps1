@@ -6,6 +6,17 @@ $MarketplaceRoot = if ($env:WORKBUDDY_MARKETPLACE_ROOT) {
 } else {
     Join-Path $UserHome ".workbuddy\connectors-marketplace"
 }
+$ProductRoot = if ($env:WORKBUDDY_PRODUCT_ROOT) {
+    $env:WORKBUDDY_PRODUCT_ROOT
+} else {
+    Split-Path -Parent $MarketplaceRoot
+}
+$AccountStateRoot = if ($env:WORKBUDDY_ACCOUNT_STATE_ROOT) {
+    $env:WORKBUDDY_ACCOUNT_STATE_ROOT
+} else {
+    Join-Path $ProductRoot "connectors"
+}
+$AccountStateBackupSuffix = ".textin-xparse.production.bak"
 $CatalogFile = if ($env:WORKBUDDY_CONNECTOR_CATALOG) {
     $env:WORKBUDDY_CONNECTOR_CATALOG
 } else {
@@ -45,7 +56,7 @@ $CLIBackup = "${CLIPath}.production.bak"
 $ActiveSkillsDir = if ($env:WORKBUDDY_CONNECTOR_SKILLS_DIR) {
     $env:WORKBUDDY_CONNECTOR_SKILLS_DIR
 } else {
-    Join-Path $UserHome ".workbuddy\connectors\skills\connector-textin-xparse"
+    Join-Path $ProductRoot "connectors\skills\connector-textin-xparse"
 }
 $ActiveSkillsBackup = "${ActiveSkillsDir}.production.bak"
 $Timestamp = Get-Date -Format "yyyyMMddHHmmss"
@@ -67,6 +78,53 @@ $UTF8Strict = New-Object System.Text.UTF8Encoding($false, $true)
 function Read-Utf8Json {
     param([string]$Path)
     return ([System.IO.File]::ReadAllText($Path, $UTF8Strict) | ConvertFrom-Json)
+}
+
+function Get-AccountStateBackups {
+    if (-not (Test-Path -LiteralPath $AccountStateRoot -PathType Container)) {
+        return @()
+    }
+    return @(
+        Get-ChildItem -LiteralPath $AccountStateRoot -Recurse -File |
+            Where-Object {
+                $_.Name -eq "connector-states.v3.json${AccountStateBackupSuffix}"
+            }
+    )
+}
+
+function Restore-AccountStateBackups {
+    param(
+        [string]$ArchiveRoot,
+        [string]$ArchivePrefix
+    )
+    $AccountBackups = @(Get-AccountStateBackups)
+    for ($Index = 0; $Index -lt $AccountBackups.Count; $Index++) {
+        $ArchivePath = Join-Path $ArchiveRoot "${ArchivePrefix}.$($Index + 1).json"
+        if (Test-Path -LiteralPath $ArchivePath) {
+            throw "账号状态归档目标已存在：${ArchivePath}。请稍后重试。"
+        }
+    }
+
+    for ($Index = 0; $Index -lt $AccountBackups.Count; $Index++) {
+        $BackupPath = $AccountBackups[$Index].FullName
+        $StatePath = $BackupPath.Substring(
+            0,
+            $BackupPath.Length - $AccountStateBackupSuffix.Length
+        )
+        $ArchivePath = Join-Path $ArchiveRoot "${ArchivePrefix}.$($Index + 1).json"
+        if (Test-Path -LiteralPath $StatePath -PathType Leaf) {
+            if (-not (Test-Path -LiteralPath $ArchiveRoot -PathType Container)) {
+                New-Item -ItemType Directory -Path $ArchiveRoot -Force | Out-Null
+            }
+            Move-Item -LiteralPath $StatePath -Destination $ArchivePath
+        }
+        $StateParent = Split-Path -Parent $StatePath
+        if (-not (Test-Path -LiteralPath $StateParent -PathType Container)) {
+            New-Item -ItemType Directory -Path $StateParent -Force | Out-Null
+        }
+        Move-Item -LiteralPath $BackupPath -Destination $StatePath
+        Write-Host "已恢复账号状态：${StatePath}"
+    }
 }
 
 function Restore-OrphanedBackup {
@@ -99,6 +157,8 @@ if (-not (Test-Path -LiteralPath $MarkerFile -PathType Leaf)) {
         $CLIBackup,
         $ActiveSkillsBackup
     ) | Where-Object { Test-Path -LiteralPath $_ }
+    $AccountStateBackups = @(Get-AccountStateBackups)
+    $OrphanedBackups += @($AccountStateBackups | ForEach-Object { $_.FullName })
     if ($OrphanedBackups.Count -gt 0) {
         $BackupList = ($OrphanedBackups | ForEach-Object { "  - $_" }) -join "`n"
         if (Test-Path -LiteralPath $OrphanRecoveryRoot) {
@@ -115,6 +175,7 @@ if (-not (Test-Path -LiteralPath $MarkerFile -PathType Leaf)) {
         Restore-OrphanedBackup $CLIPath $CLIBackup "xparse-cli.current.exe"
         Restore-OrphanedBackup $ActiveSkillsDir $ActiveSkillsBackup `
             "activated-skills.current"
+        Restore-AccountStateBackups $OrphanRecoveryRoot "account-state.current"
         if (Test-Path -LiteralPath $CatalogFile -PathType Leaf) {
             Read-Utf8Json $CatalogFile | Out-Null
         }
@@ -145,6 +206,7 @@ foreach ($Target in @(
 if (-not (Test-Path -LiteralPath $TestBackupRoot -PathType Container)) {
     New-Item -ItemType Directory -Path $TestBackupRoot -Force | Out-Null
 }
+Restore-AccountStateBackups $TestBackupRoot "account-state.${Timestamp}"
 Move-Item -LiteralPath $ConnectorDir -Destination $ConnectorTestBackup
 Move-Item -LiteralPath $CatalogFile -Destination $CatalogTestBackup
 Move-Item -LiteralPath $CatalogBackup -Destination $CatalogFile
@@ -185,7 +247,7 @@ if (Test-Path -LiteralPath $ActiveSkillsBackup -PathType Container) {
     Move-Item -LiteralPath $ActiveSkillsBackup -Destination $ActiveSkillsDir
 }
 
-Write-Host "已恢复执行测试脚本前的 WorkBuddy marketplace、Connector、CLI、profile 和已激活 Skill 状态。"
+Write-Host "已恢复执行测试脚本前的 WorkBuddy marketplace、Connector、账号、CLI、profile 和已激活 Skill 状态。"
 Write-Host "本次测试 Connector 已归档到：${ConnectorTestBackup}"
 Write-Host ""
 Write-Host "请完全退出并重新打开 WorkBuddy，使恢复后的状态生效。"

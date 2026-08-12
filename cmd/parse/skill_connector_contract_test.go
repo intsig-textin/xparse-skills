@@ -288,6 +288,12 @@ func TestWorkBuddyMacOSTestInjectionRestoresUninstalledBaseline(t *testing.T) {
 	assetDir := filepath.Join(tempDir, "assets")
 	testBackupRoot := filepath.Join(tempDir, "test-backups")
 	activeSkillsDir := filepath.Join(tempDir, "activated-skills", "connector-textin-xparse")
+	accountStatePath := filepath.Join(
+		tempDir,
+		"account-states",
+		"account-a",
+		"connector-states.v3.json",
+	)
 	for _, dir := range []string{
 		catalogDir,
 		connectorsDir,
@@ -295,10 +301,15 @@ func TestWorkBuddyMacOSTestInjectionRestoresUninstalledBaseline(t *testing.T) {
 		profileDir,
 		filepath.Dir(cliPath),
 		assetDir,
+		filepath.Dir(accountStatePath),
 	} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
+	}
+	productionAccountState := []byte("{\"enabled\":[\"existing\"],\"version\":3}\n")
+	if err := os.WriteFile(accountStatePath, productionAccountState, 0o600); err != nil {
+		t.Fatal(err)
 	}
 
 	productionCatalog := []byte(`{
@@ -387,6 +398,13 @@ func TestWorkBuddyMacOSTestInjectionRestoresUninstalledBaseline(t *testing.T) {
 		t.Fatalf("test Connector unexpectedly includes xparse-doc-tools: %v", err)
 	}
 	assertCatalogConnectorCount(t, catalogPath, "textin-xparse", 1)
+	assertAccountConnectorCount(t, accountStatePath, "existing", 1)
+	assertAccountConnectorCount(t, accountStatePath, "textin-xparse", 1)
+	assertFileContent(
+		t,
+		accountStatePath+".textin-xparse.production.bak",
+		productionAccountState,
+	)
 	assertFileContent(t, catalogPath+".textin-xparse.production.bak", productionCatalog)
 	assertFileContent(t, filepath.Join(profileDir+".production.bak", "config.yaml"),
 		productionProfile)
@@ -419,6 +437,8 @@ func TestWorkBuddyMacOSTestInjectionRestoresUninstalledBaseline(t *testing.T) {
 		productionToken)
 	assertFileContent(t, cliPath+".production.bak", productionCLI)
 	assertCatalogConnectorCount(t, catalogPath, "textin-xparse", 1)
+	assertAccountConnectorCount(t, accountStatePath, "existing", 1)
+	assertAccountConnectorCount(t, accountStatePath, "textin-xparse", 1)
 	assertFileContent(t, marketplaceIcon, testIcon)
 
 	if err := os.MkdirAll(profileDir, 0o700); err != nil {
@@ -466,6 +486,18 @@ func TestWorkBuddyMacOSTestInjectionRestoresUninstalledBaseline(t *testing.T) {
 	assertFileContent(t, filepath.Join(profileDir, "oauth-token.json"), productionToken)
 	assertFileContent(t, cliPath, productionCLI)
 	assertFileContent(t, marketplaceIcon, productionMarketplaceIcon)
+	assertFileContent(t, accountStatePath, productionAccountState)
+	if _, err := os.Stat(accountStatePath + ".textin-xparse.production.bak"); !os.IsNotExist(err) {
+		t.Fatalf("restore kept the account-state backup active: %v", err)
+	}
+	testAccountStateBackups, err := filepath.Glob(
+		filepath.Join(testBackupRoot, "account-state.*.json"),
+	)
+	if err != nil || len(testAccountStateBackups) != 1 {
+		t.Fatalf("account state backups = %v, err = %v", testAccountStateBackups, err)
+	}
+	assertAccountConnectorCount(t, testAccountStateBackups[0], "existing", 1)
+	assertAccountConnectorCount(t, testAccountStateBackups[0], "textin-xparse", 1)
 	testProfileBackups, err := filepath.Glob(profileDir + ".test.*.bak")
 	if err != nil || len(testProfileBackups) != 1 {
 		t.Fatalf("test profile backups = %v, err = %v", testProfileBackups, err)
@@ -622,6 +654,12 @@ func TestWorkBuddyRestoreRecoversOrphanedFixedBackups(t *testing.T) {
 	testBackupRoot := filepath.Join(tempDir, "test-backups")
 	assetDir := filepath.Join(tempDir, "assets")
 	catalogPath := filepath.Join(marketplaceRoot, ".codebuddy-connector", "connectors.json")
+	accountStatePath := filepath.Join(
+		tempDir,
+		"account-states",
+		"account-a",
+		"connector-states.v3.json",
+	)
 	for _, dir := range []string{
 		profileDir,
 		profileBackup,
@@ -629,6 +667,7 @@ func TestWorkBuddyRestoreRecoversOrphanedFixedBackups(t *testing.T) {
 		filepath.Join(activeSkillsDir, "xparse-parse"),
 		filepath.Join(activeSkillsDir+".production.bak", "legacy-skill"),
 		filepath.Dir(catalogPath),
+		filepath.Dir(accountStatePath),
 		assetDir,
 	} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -669,6 +708,18 @@ func TestWorkBuddyRestoreRecoversOrphanedFixedBackups(t *testing.T) {
 	if err := os.WriteFile(catalogPath, productionCatalog, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	testAccountState := []byte("{\"enabled\":[\"existing\",\"textin-xparse\"]}\n")
+	productionAccountState := []byte("{\"enabled\":[\"existing\"]}\n")
+	if err := os.WriteFile(accountStatePath, testAccountState, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		accountStatePath+".textin-xparse.production.bak",
+		productionAccountState,
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
 	writeWorkBuddyTestAssets(t, assetDir)
 
 	runWorkBuddyScript(
@@ -683,6 +734,7 @@ func TestWorkBuddyRestoreRecoversOrphanedFixedBackups(t *testing.T) {
 	)
 	assertFileContent(t, filepath.Join(profileDir, "config.yaml"), productionConfig)
 	assertFileContent(t, cliPath, productionCLI)
+	assertFileContent(t, accountStatePath, productionAccountState)
 	assertFileContent(
 		t,
 		filepath.Join(activeSkillsDir, "legacy-skill", "SKILL.md"),
@@ -692,6 +744,7 @@ func TestWorkBuddyRestoreRecoversOrphanedFixedBackups(t *testing.T) {
 		profileBackup,
 		cliPath + ".production.bak",
 		activeSkillsDir + ".production.bak",
+		accountStatePath + ".textin-xparse.production.bak",
 	} {
 		if _, err := os.Stat(backup); !os.IsNotExist(err) {
 			t.Fatalf("orphaned backup remains at %s: %v", backup, err)
@@ -703,6 +756,11 @@ func TestWorkBuddyRestoreRecoversOrphanedFixedBackups(t *testing.T) {
 	}
 	assertFileContent(t, filepath.Join(recoveryRoots[0], "profile.current", "config.yaml"), testConfig)
 	assertFileContent(t, filepath.Join(recoveryRoots[0], "xparse-cli.current"), testCLI)
+	assertFileContent(
+		t,
+		filepath.Join(recoveryRoots[0], "account-state.current.1.json"),
+		testAccountState,
+	)
 	assertFileContent(
 		t,
 		filepath.Join(recoveryRoots[0], "activated-skills.current", "xparse-parse", "SKILL.md"),
@@ -739,6 +797,8 @@ func TestWorkBuddyWindowsSwitchScriptsMatchMacOSSafetyContract(t *testing.T) {
 		}
 		for _, expected := range []string{
 			"WORKBUDDY_MARKETPLACE_ROOT",
+			"WORKBUDDY_PRODUCT_ROOT",
+			"WORKBUDDY_ACCOUNT_STATE_ROOT",
 			"WORKBUDDY_CONNECTOR_CATALOG",
 			"WORKBUDDY_CONNECTOR_DIR",
 			"XPARSE_WORKBUDDY_PROFILE_DIR",
@@ -747,6 +807,8 @@ func TestWorkBuddyWindowsSwitchScriptsMatchMacOSSafetyContract(t *testing.T) {
 			"WORKBUDDY_MARKETPLACE_ICONS_DIR",
 			"MarketplaceIconBackup",
 			"production.bak",
+			"connector-states.v3.json",
+			"textin-xparse.production.bak",
 			"ConvertFrom-Json",
 			"UTF8Strict",
 			"Read-Utf8Json",
@@ -828,9 +890,36 @@ func runWorkBuddyScript(
 		"XPARSE_TEST_ASSET_DIR="+assetDir,
 		"WORKBUDDY_TEST_BACKUP_ROOT="+testBackupRoot,
 		"WORKBUDDY_CONNECTOR_SKILLS_DIR="+activeSkillsDir,
+		"WORKBUDDY_ACCOUNT_STATE_ROOT="+filepath.Join(
+			filepath.Dir(marketplaceRoot),
+			"account-states",
+		),
 	)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("%s failed: %v\n%s", name, err, output)
+	}
+}
+
+func assertAccountConnectorCount(t *testing.T, path, connectorID string, want int) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state struct {
+		Enabled []string `json:"enabled"`
+	}
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatalf("parse account state %s: %v", path, err)
+	}
+	count := 0
+	for _, enabled := range state.Enabled {
+		if enabled == connectorID {
+			count++
+		}
+	}
+	if count != want {
+		t.Fatalf("account state %s connector %q count = %d, want %d", path, connectorID, count, want)
 	}
 }
 
