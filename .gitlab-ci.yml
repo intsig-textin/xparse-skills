@@ -1,0 +1,39 @@
+stages:
+  - test
+  - build
+
+default:
+  image: golang:1.25
+  interruptible: true
+
+variables:
+  GIT_DEPTH: "0"
+  GOCACHE: "$CI_PROJECT_DIR/.ci/go-build"
+  GOMODCACHE: "$CI_PROJECT_DIR/.ci/go-mod"
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+
+test:
+  stage: test
+  before_script:
+    - ./scripts/checkout-locked-skills.sh "$CI_PROJECT_DIR/.ci/xparse-skills"
+  script:
+    - XPARSE_SKILLS_REPOSITORY="$CI_PROJECT_DIR/.ci/xparse-skills" go test ./...
+
+build:
+  stage: build
+  needs:
+    - test
+  script:
+    - BUILD_VERSION="${CI_COMMIT_TAG:-v0.0.0-${CI_COMMIT_SHORT_SHA}}"
+    - ./build.sh "$BUILD_VERSION"
+    - sha256sum dist/xparse-cli-* > dist/SHA256SUMS
+  artifacts:
+    name: "xparse-client-${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - dist/
+    expire_in: 7 days
