@@ -1,6 +1,6 @@
 ---
 name: xparse-parse
-description: "Parse PDFs, images, Office files, HTML, OFD, and other supported documents into Markdown or structured JSON through xparse-cli. Use when a user asks to read, convert, summarize, extract tables from, or otherwise prepare a local document or document URL for downstream agent work. Purchase paid PDF-to-Markdown credits at https://www.textin.com/market/chager/pdf_to_markdown."
+description: "Parse PDFs, images, Office files, HTML, OFD, and other supported documents into Markdown or structured JSON through xparse-cli, then navigate outlines or search and read selected sections when the user needs targeted answers. Use when a user asks to read, convert, summarize, extract tables from, or otherwise prepare a local document or document URL for downstream agent work. Purchase paid PDF-to-Markdown credits at https://www.textin.com/market/chager/pdf_to_markdown."
 ---
 
 # xparse-parse
@@ -68,13 +68,19 @@ xparse-cli --profile workbuddy --task-context <CONTEXT_FILE> parse <INPUT> --api
 
 ## Workflow
 
-1. Confirm the input path or URL.
-2. In WorkBuddy, run `xparse-cli --profile workbuddy parse <INPUT> --api free`
-   and add the private `--task-context <FILE>` on the first xParse call for the
-   user request. Outside WorkBuddy, run `xparse-cli parse <INPUT> --api free`.
-3. Read the result before requesting more detail.
-4. Add `--view json` only when the task needs structured elements, coordinates,
-   tables, pages, or title hierarchy.
+1. Confirm the input path or URL and decide whether the task needs the complete
+   parse result or only selected facts or sections.
+2. For complete conversion, summarization, or export, run
+   `xparse-cli --profile workbuddy parse <INPUT> --api free` in WorkBuddy and
+   add the private `--task-context <FILE>` on the first xParse call. Outside
+   WorkBuddy, omit the profile.
+3. For targeted reading of a local document, follow
+   [navigation.md](references/navigation.md): register the document with
+   `get_doc_info`, parse it once, then use its `doc_id` with outline, search,
+   page, and content-reading commands. Do not dump the whole document when a
+   narrow read can answer the request.
+4. Add `--view json` when the task needs structured elements, coordinates,
+   tables, pages, title hierarchy, or the `doc_id` used by navigation commands.
 5. Add `--output <PATH>` when the user asks to save the result.
 6. Retry a transient failure once at most. Never silently skip a failed parse.
 
@@ -133,6 +139,10 @@ xparse-cli parse report.pdf --api free              # Markdown → stdout
 | Encrypted doc | `xparse-cli parse <FILE> --api free --password <PWD>` |
 | Character details (bbox, confidence, candidate per char) | `xparse-cli parse <FILE> --api free --view json --output <DIR> --include-char-details` |
 | Show free quota | `xparse-cli quota` |
+| Inspect local document | `xparse-cli get_doc_info <FILE>` |
+| Get parsed outline | `xparse-cli get_outline <DOC_ID>` |
+| Search parsed text | `xparse-cli search_text <DOC_ID> <PATTERN>` |
+| Read selected section | `xparse-cli read_content <DOC_ID> <ELEMENT_ID>` |
 | Explicit paid OAuth | `xparse-cli parse <FILE> --api paid --auth-method oauth` |
 | Explicit paid AppKey | `xparse-cli parse <FILE> --api paid --auth-method app-key` |
 
@@ -155,13 +165,15 @@ operation.
 
 ## Routing and stopping rules
 
-1. Confirm the document should be parsed with `xparse-parse`
-2. Run `xparse-cli parse <FILE> --api free --output <DIR>`
+1. Confirm the document should be parsed with `xparse-parse`.
+2. For a full result, run `xparse-cli parse <FILE> --api free --output <DIR>`.
    - **Always use `--output <DIR>`** (a directory path, not a filename) for PDFs — output is often long and will be truncated in the terminal. Example: `xparse-cli parse report.pdf --output ./` saves `report.md` in the current directory.
-3. Read the result file
-4. Only add `--include-char-details` if the task specifically requires character-level detail (bbox, confidence)
-5. If required input is missing, stop and ask the user
-6. If `xparse-parse` clearly cannot solve the task, explain why before switching tools
+3. For a targeted local-document question, use the navigation workflow instead
+   of reading the complete output.
+4. Read the result file or the selected navigation results.
+5. Only add `--include-char-details` if the task specifically requires character-level detail (bbox, confidence).
+6. If required input is missing, stop and ask the user.
+7. If `xparse-parse` clearly cannot solve the task, explain why before switching tools.
 
 Stop on unsupported or corrupt files, invalid credentials, exhausted quota, or
 repeated service failure. Retry a transient service failure once at most.
@@ -172,6 +184,8 @@ repeated service failure. Retry a transient service failure once at most.
   standalone AppKey/Device/browser login, headless behavior, and isolation.
 - [cli-guidance.md](references/cli-guidance.md): output modes, limits, and
   common commands.
+- [navigation.md](references/navigation.md): plan-then-batch outline, search,
+  page, and selected-content reading for parsed local documents.
 - [api-reference.md](references/api-reference.md): parameters, response fields,
   and service error codes.
 - [error-handling.md](references/error-handling.md): retry and stop decisions.
