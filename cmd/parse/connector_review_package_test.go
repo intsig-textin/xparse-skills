@@ -60,6 +60,9 @@ func TestDomesticConnectorReviewPackageContract(t *testing.T) {
 	var marketplace struct {
 		VisibleIn           []string `json:"visible_in"`
 		MinWorkBuddyVersion string   `json:"minWorkbuddyVersion"`
+		Description         string   `json:"description"`
+		DescriptionZH       string   `json:"description_zh"`
+		DescriptionEN       string   `json:"description_en"`
 	}
 	if err := json.Unmarshal(files[prefix+"marketplace-entry.json"], &marketplace); err != nil {
 		t.Fatal(err)
@@ -70,6 +73,16 @@ func TestDomesticConnectorReviewPackageContract(t *testing.T) {
 	}
 	if marketplace.MinWorkBuddyVersion != "5.0.0" {
 		t.Fatalf("minWorkbuddyVersion = %q", marketplace.MinWorkBuddyVersion)
+	}
+	for field, description := range map[string]string{
+		"description":    marketplace.Description,
+		"description_zh": marketplace.DescriptionZH,
+		"description_en": marketplace.DescriptionEN,
+	} {
+		if !strings.Contains(description, "500") || strings.Contains(description, "1,000") ||
+			strings.Contains(description, "1000") {
+			t.Errorf("%s does not describe the 500-page free quota: %q", field, description)
+		}
 	}
 
 	var cli connectorCLIContract
@@ -95,6 +108,23 @@ func TestDomesticConnectorReviewPackageContract(t *testing.T) {
 		t.Fatal("Connector icon and Skill logo no longer match the approved asset")
 	}
 	assertReviewChecksums(t, prefix, files)
+}
+
+func TestDomesticSkillDocumentsUse500PageDailyQuota(t *testing.T) {
+	guidance := string(readRepositoryFile(
+		t,
+		"skills",
+		"xparse-parse",
+		"references",
+		"cli-guidance.md",
+	))
+	if !strings.Contains(guidance, "单 IP ≤ 500 页/天") {
+		t.Fatal("Skill guidance does not document the 500-page daily free quota")
+	}
+	if strings.Contains(guidance, "单 IP ≤ 1000 页/天") ||
+		strings.Contains(guidance, "单 IP ≤ 1,000 页/天") {
+		t.Fatal("Skill guidance retains the old 1000-page daily free quota")
+	}
 }
 
 func TestDomesticConnectorReviewValidatorRejectsMissingVisibleIn(t *testing.T) {
