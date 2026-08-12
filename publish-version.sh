@@ -31,9 +31,37 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DIST_DIR="${SCRIPT_DIR}/dist"
-CONNECTOR_DIR="${SCRIPT_DIR}/../connector"
+CONNECTOR_DIR="${SCRIPT_DIR}/connector"
 CONNECTOR_TEST_DIR="${CONNECTOR_DIR}/test"
-SKILLS_DIR="${SCRIPT_DIR}/../skills"
+RELEASE_LOCK="${SCRIPT_DIR}/release-lock.json"
+SKILLS_REPOSITORY="${XPARSE_SKILLS_REPOSITORY:-}"
+if [ -z "$SKILLS_REPOSITORY" ]; then
+  for candidate in \
+    "${SCRIPT_DIR}/../xparse-skills-v2.2.1" \
+    "${SCRIPT_DIR}/../xparse-skills"; do
+    if [ -d "$candidate" ]; then
+      SKILLS_REPOSITORY="$candidate"
+      break
+    fi
+  done
+fi
+if [ -z "$SKILLS_REPOSITORY" ]; then
+  echo "xparse-skills repository not found; set XPARSE_SKILLS_REPOSITORY."
+  exit 1
+fi
+if [ ! -f "$RELEASE_LOCK" ]; then
+  echo "Missing release lock: ${RELEASE_LOCK}"
+  exit 1
+fi
+LOCKED_SKILLS_COMMIT="$(python3 -c \
+  'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["skills_commit"])' \
+  "$RELEASE_LOCK")"
+ACTUAL_SKILLS_COMMIT="$(git -C "$SKILLS_REPOSITORY" rev-parse HEAD)"
+if [ "$ACTUAL_SKILLS_COMMIT" != "$LOCKED_SKILLS_COMMIT" ]; then
+  echo "xparse-skills checkout ${ACTUAL_SKILLS_COMMIT} does not match release lock ${LOCKED_SKILLS_COMMIT}."
+  exit 1
+fi
+SKILLS_DIR="${SKILLS_REPOSITORY}/skills"
 BASE_PATH="xparse-cli/${VERSION}"
 UPLOAD_SCRIPT="${SCRIPT_DIR}/upload.sh"
 SKILL_ARCHIVE="${DIST_DIR}/workbuddy-xparse-parse.zip"

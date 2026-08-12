@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/intsig-textin/xparse-skills/cli/internal/config"
+	"gitlab.intsig.net/xparse/xparse-client/internal/config"
 )
 
 func resolveTask(contextPath, clientVersion string, now time.Time) (Task, int) {

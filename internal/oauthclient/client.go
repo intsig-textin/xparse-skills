@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/intsig-textin/xparse-skills/cli/internal/credential"
+	"gitlab.intsig.net/xparse/xparse-client/internal/credential"
 )
 
 const (

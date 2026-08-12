@@ -1,4 +1,4 @@
-module github.com/intsig-textin/xparse-skills/cli
+module gitlab.intsig.net/xparse/xparse-client
 
 go 1.25.0
 

@@ -5,8 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/intsig-textin/xparse-skills/cli/internal/client"
-	"github.com/intsig-textin/xparse-skills/cli/internal/config"
+	"gitlab.intsig.net/xparse/xparse-client/internal/client"
+	"gitlab.intsig.net/xparse/xparse-client/internal/config"
 )
 
 // Type aliases — re-export from internal/client so existing parse code compiles unchanged.

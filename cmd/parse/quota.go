@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/intsig-textin/xparse-skills/cli/internal/exitcode"
+	"gitlab.intsig.net/xparse/xparse-client/internal/exitcode"
 )
 
 const freeQuotaURL = "https://api.textin.com/api/v1/agent/parse/quota"

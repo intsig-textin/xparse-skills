@@ -12,9 +12,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/intsig-textin/xparse-skills/cli/internal/authsession"
-	"github.com/intsig-textin/xparse-skills/cli/internal/config"
-	"github.com/intsig-textin/xparse-skills/cli/internal/credential"
+	"gitlab.intsig.net/xparse/xparse-client/internal/authsession"
+	"gitlab.intsig.net/xparse/xparse-client/internal/config"
+	"gitlab.intsig.net/xparse/xparse-client/internal/credential"
 )
 
 func enqueueAndUpload(ctx context.Context, item queuedEvent, bearerToken string) error {

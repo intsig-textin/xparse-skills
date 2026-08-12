@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/intsig-textin/xparse-skills/cli/internal/telemetry"
+	"gitlab.intsig.net/xparse/xparse-client/internal/telemetry"
 )
 
 // RegisterCommands adds all tool primitive commands to the given root command.

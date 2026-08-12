@@ -949,8 +949,34 @@ func repositoryPath(t *testing.T, pathParts ...string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allParts := append([]string{dir, "..", "..", ".."}, pathParts...)
-	return filepath.Clean(filepath.Join(allParts...))
+	clientRoot := filepath.Clean(filepath.Join(dir, "..", ".."))
+	if len(pathParts) == 0 {
+		return clientRoot
+	}
+
+	switch pathParts[0] {
+	case "cli":
+		return filepath.Join(append([]string{clientRoot}, pathParts[1:]...)...)
+	case "skills":
+		skillsRoot := os.Getenv("XPARSE_SKILLS_REPOSITORY")
+		if skillsRoot == "" {
+			for _, candidate := range []string{
+				filepath.Join(clientRoot, "..", "xparse-skills-v2.2.1"),
+				filepath.Join(clientRoot, "..", "xparse-skills"),
+			} {
+				if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
+					skillsRoot = candidate
+					break
+				}
+			}
+		}
+		if skillsRoot == "" {
+			t.Fatal("xparse-skills repository not found; set XPARSE_SKILLS_REPOSITORY")
+		}
+		return filepath.Join(append([]string{skillsRoot}, pathParts...)...)
+	default:
+		return filepath.Join(append([]string{clientRoot}, pathParts...)...)
+	}
 }
 
 func toWorkBuddyString(value any) string {
@@ -1086,8 +1112,7 @@ func TestSkillUsesFormalCLIWithoutCredentialCollection(t *testing.T) {
 
 func readRepositoryFile(t *testing.T, pathParts ...string) []byte {
 	t.Helper()
-	parts := append([]string{"..", "..", ".."}, pathParts...)
-	data, err := os.ReadFile(filepath.Join(parts...))
+	data, err := os.ReadFile(repositoryPath(t, pathParts...))
 	if err != nil {
 		t.Fatal(err)
 	}

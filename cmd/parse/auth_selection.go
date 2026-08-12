@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/intsig-textin/xparse-skills/cli/internal/config"
-	"github.com/intsig-textin/xparse-skills/cli/internal/exitcode"
+	"gitlab.intsig.net/xparse/xparse-client/internal/config"
+	"gitlab.intsig.net/xparse/xparse-client/internal/exitcode"
 )
 
 type authMethod string

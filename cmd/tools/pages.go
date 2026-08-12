@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/intsig-textin/xparse-skills/cli/internal/cache"
-	"github.com/intsig-textin/xparse-skills/cli/internal/models"
+	"gitlab.intsig.net/xparse/xparse-client/internal/cache"
+	"gitlab.intsig.net/xparse/xparse-client/internal/models"
 )
 
 var readPagesCmd = &cobra.Command{

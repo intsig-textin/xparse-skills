@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/intsig-textin/xparse-skills/cli/internal/cache"
+	"gitlab.intsig.net/xparse/xparse-client/internal/cache"
 )
 
 var cacheCmd = &cobra.Command{

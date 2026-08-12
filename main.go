@@ -4,7 +4,7 @@ import (
 	"errors"
 	"os"
 
-	cmd "github.com/intsig-textin/xparse-skills/cli/cmd/parse"
+	cmd "gitlab.intsig.net/xparse/xparse-client/cmd/parse"
 )
 
 func main() {

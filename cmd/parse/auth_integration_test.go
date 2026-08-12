@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/intsig-textin/xparse-skills/cli/internal/config"
-	"github.com/intsig-textin/xparse-skills/cli/internal/credential"
-	"github.com/intsig-textin/xparse-skills/cli/internal/oauthclient"
+	"gitlab.intsig.net/xparse/xparse-client/internal/config"
+	"gitlab.intsig.net/xparse/xparse-client/internal/credential"
+	"gitlab.intsig.net/xparse/xparse-client/internal/oauthclient"
 )
 
 func TestDeviceAutoOpensCompleteURIExactlyOnce(t *testing.T) {

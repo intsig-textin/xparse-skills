@@ -1,4 +1,4 @@
-# xParser CLI
+# xParse Client
 
 Textin xParser 文档解析命令行工具，基于 [TextIn xParse API](https://docs.textin.com/api-reference/endpoint/xparse/v1/parse-sync) 实现。
 
@@ -27,7 +27,7 @@ irm https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.ps1 | iex
 **单平台构建（当前系统）：**
 
 ```bash
-cd cli
+cd xparse-client
 go build -o xparse-cli .
 ```
 
@@ -37,7 +37,7 @@ go build -o xparse-cli .
 VERSION=v0.0.1
 COMMIT=$(git rev-parse --short HEAD)
 DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-PKG=github.com/intsig-textin/xparse-skills/cli/cmd
+PKG=gitlab.intsig.net/xparse/xparse-client/cmd
 
 go build -ldflags "-s -w \
   -X ${PKG}.version=${VERSION} \
@@ -52,7 +52,7 @@ go build -ldflags "-s -w \
 VERSION=v0.0.1
 COMMIT=$(git rev-parse --short HEAD)
 DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-PKG=github.com/intsig-textin/xparse-skills/cli/cmd
+PKG=gitlab.intsig.net/xparse/xparse-client/cmd
 LDFLAGS="-s -w -X ${PKG}.version=${VERSION} -X ${PKG}.commit=${COMMIT} -X ${PKG}.date=${DATE}"
 
 GOOS=linux   GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/xparse-cli-linux-amd64 .
@@ -63,7 +63,7 @@ GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/xparse-cli-window
 GOOS=windows GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/xparse-cli-windows-arm64.exe .
 ```
 
-产物位于 `cli/dist/` 目录，共 6 个二进制文件：
+产物位于 `dist/` 目录，共 6 个二进制文件：
 
 | 平台 | 文件 |
 |------|------|

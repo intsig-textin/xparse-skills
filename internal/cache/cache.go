@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/intsig-textin/xparse-skills/cli/internal/models"
+	"gitlab.intsig.net/xparse/xparse-client/internal/models"
 )
 
 // DocID computes the document identifier: sha256(abs_filepath)[:12].

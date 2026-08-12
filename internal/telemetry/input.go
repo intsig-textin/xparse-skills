@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/intsig-textin/xparse-skills/cli/internal/cache"
+	"gitlab.intsig.net/xparse/xparse-client/internal/cache"
 )
 
 func SummarizeSource(source string) InputSummary {

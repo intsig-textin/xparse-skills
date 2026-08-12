@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/intsig-textin/xparse-skills/cli/internal/config"
+	"gitlab.intsig.net/xparse/xparse-client/internal/config"
 )
 
 func TestXParserClientFromHeader(t *testing.T) {

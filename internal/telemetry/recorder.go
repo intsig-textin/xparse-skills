@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/intsig-textin/xparse-skills/cli/internal/config"
+	"gitlab.intsig.net/xparse/xparse-client/internal/config"
 )
 
 var trackedCommands = map[string]bool{

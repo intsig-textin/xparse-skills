@@ -18,7 +18,7 @@ if [ -z "$GO_BIN" ]; then
   exit 1
 fi
 
-PKG="github.com/intsig-textin/xparse-skills/cli/cmd/parse"
+PKG="gitlab.intsig.net/xparse/xparse-client/cmd/parse"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLI_DIR="${SCRIPT_DIR}"
 DIST_DIR="${SCRIPT_DIR}/dist"

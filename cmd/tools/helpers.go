@@ -9,11 +9,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/intsig-textin/xparse-skills/cli/internal/authsession"
-	"github.com/intsig-textin/xparse-skills/cli/internal/client"
-	"github.com/intsig-textin/xparse-skills/cli/internal/config"
-	"github.com/intsig-textin/xparse-skills/cli/internal/exitcode"
-	"github.com/intsig-textin/xparse-skills/cli/internal/telemetry"
+	"gitlab.intsig.net/xparse/xparse-client/internal/authsession"
+	"gitlab.intsig.net/xparse/xparse-client/internal/client"
+	"gitlab.intsig.net/xparse/xparse-client/internal/config"
+	"gitlab.intsig.net/xparse/xparse-client/internal/exitcode"
+	"gitlab.intsig.net/xparse/xparse-client/internal/telemetry"
 )
 
 // resolveCredentials resolves credentials for primitive commands.

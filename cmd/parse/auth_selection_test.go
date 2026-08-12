@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/intsig-textin/xparse-skills/cli/internal/config"
-	"github.com/intsig-textin/xparse-skills/cli/internal/credential"
+	"gitlab.intsig.net/xparse/xparse-client/internal/config"
+	"gitlab.intsig.net/xparse/xparse-client/internal/credential"
 )
 
 func TestAPIAuthMethodMatrix(t *testing.T) {
