@@ -16,3 +16,6 @@ cli/xparse-cli.exe
 .idea/
 *.swp
 *.swo
+
+# Local development workflow records
+.dev-flow/
