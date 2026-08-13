@@ -1,6 +1,6 @@
 # xparse-skills
 
-Agent skills and CLI for document parsing powered by [TextIn xParse API](https://docs.textin.com/api-reference/endpoint/xparse/v1/parse-sync).
+Agent skills for document parsing powered by [TextIn xParse API](https://docs.textin.com/api-reference/endpoint/xparse/v1/parse-sync).
 
 Turn PDFs, images, and Office documents into clean Markdown or structured JSON — directly inside your AI coding agent.
 
@@ -33,39 +33,12 @@ xparse-cli parse report.pdf --output ./result/   # Save to directory
 
 > See [SKILL.md](skills/xparse-parse/SKILL.md) for full routing rules, error handling, and references.
 
-## CLI
+## CLI ownership
 
-`xparse-cli` is the underlying binary. It can also be used standalone.
-
-**Install:**
-
-```bash
-# Linux / macOS
-source <(curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.sh)
-
-# Windows (PowerShell)
-irm https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.ps1 | iex
-```
-
-**Key commands:**
-
-| Command | Description |
-|---------|-------------|
-| `xparse-cli parse <file>` | Parse a document to Markdown or JSON |
-| `xparse-cli auth` | Configure API credentials (interactive) |
-| `xparse-cli download --from result.json` | Download images from parse results |
-| `xparse-cli update` | Self-update to the latest version |
-| `xparse-cli version` | Show version info |
-
-**Free vs paid API:**
-
-| | Free | Paid |
-|-|------|------|
-| Supported formats | PDF, images | All formats |
-| Credentials | Not required | `xparse-cli auth` |
-| File size limit | 10 MB | 500 MB |
-
-> Full CLI documentation: [cli/README.md](cli/README.md)
+This repository does not contain CLI, Connector, installer, build, or release
+sources. Those components are maintained and released only from the GitLab
+`xparse-client` repository. Skill documentation may reference installed
+`xparse-cli` commands, but CLI implementation changes must not be added here.
 
 ## Repository Structure
 
@@ -74,13 +47,6 @@ skills/
   xparse-parse/          # Agent skill definition and references
     SKILL.md
     references/
-cli/                     # xparse-cli source (Go)
-  cmd/
-  internal/
-  install/               # Install scripts
-  build.sh               # Cross-compile script
-.github/workflows/
-  release.yml            # Auto-release on tag push
 ```
 
 ## License
