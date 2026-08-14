@@ -6,18 +6,16 @@ Textin xParser 文档解析命令行工具，基于 [TextIn xParse API](https://
 
 ## 安装
 
-### 一键安装
-
-**Linux / macOS**
+### npm 安装
 
 ```bash
-source <(curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.sh)
+npm i -g xparse-cli
 ```
 
-**Windows (PowerShell)**
+国内网络环境可使用 npmmirror 镜像：
 
-```powershell
-irm https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.ps1 | iex
+```bash
+npm i -g xparse-cli --registry=https://registry.npmmirror.com
 ```
 
 ### 从源码构建

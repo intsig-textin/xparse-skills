@@ -40,7 +40,13 @@ xparse-cli parse report.pdf --api auto --output ./result/    # Save to directory
 **Install:**
 
 ```bash
-npm install --global --registry=https://registry.npmmirror.com xparse-cli@2.2.1-beta.2
+npm i -g xparse-cli
+```
+
+For users in China, use the npmmirror registry:
+
+```bash
+npm i -g xparse-cli --registry=https://registry.npmmirror.com
 ```
 
 **Key commands:**

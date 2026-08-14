@@ -171,11 +171,17 @@ navigation or extraction.
 
 ## Setup and command discovery
 
-Check installation with `xparse-cli version`. The current beta package requires
-Node.js 18 or newer and can be installed with:
+Check installation with `xparse-cli version`. The package requires Node.js 18
+or newer and can be installed with:
 
 ```bash
-npm install --global --registry=https://registry.npmmirror.com xparse-cli@2.2.1-beta.2
+npm i -g xparse-cli
+```
+
+For users in China, use the npmmirror registry:
+
+```bash
+npm i -g xparse-cli --registry=https://registry.npmmirror.com
 ```
 
 The WorkBuddy Connector installs its pinned CLI version automatically. Do not
