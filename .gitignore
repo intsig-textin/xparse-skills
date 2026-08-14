@@ -16,3 +16,5 @@ cli/xparse-cli.exe
 .idea/
 *.swp
 *.swo
+.dev-flow
+.design
