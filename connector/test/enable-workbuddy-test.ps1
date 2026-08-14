@@ -1,6 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $Version = if ($env:XPARSER_VERSION) { $env:XPARSER_VERSION } else { "v2.2.0-workbuddy-test.3" }
+$NpmVersion = if ($env:XPARSE_NPM_VERSION) { $env:XPARSE_NPM_VERSION } else { "2.2.1-beta.1" }
 $ExpectedAuthDomain = if ($env:XPARSE_EXPECTED_AUTH_DOMAIN) {
     $env:XPARSE_EXPECTED_AUTH_DOMAIN
 } else {
@@ -57,12 +58,17 @@ $ProfileDir = if ($env:XPARSE_WORKBUDDY_PROFILE_DIR) {
     Join-Path $UserHome ".xparse-cli\profiles\workbuddy"
 }
 $ProfileBackup = "${ProfileDir}.production.bak"
+$NpmPrefix = if ($env:XPARSE_NPM_PREFIX) {
+    $env:XPARSE_NPM_PREFIX
+} else {
+    Join-Path $UserHome ".xparse-cli\npm"
+}
+$NpmBackup = "${NpmPrefix}.production.bak"
 $CLIPath = if ($env:XPARSE_CLI_PATH) {
     $env:XPARSE_CLI_PATH
 } else {
-    Join-Path $UserHome ".xparse-cli\bin\xparse-cli.exe"
+    Join-Path $NpmPrefix "xparse-cli.cmd"
 }
-$CLIBackup = "${CLIPath}.production.bak"
 $ActiveSkillsDir = if ($env:WORKBUDDY_CONNECTOR_SKILLS_DIR) {
     $env:WORKBUDDY_CONNECTOR_SKILLS_DIR
 } else {
@@ -236,7 +242,7 @@ try {
             $ConnectorBackup,
             $MarketplaceIconBackup,
             $ProfileBackup,
-            $CLIBackup,
+            $NpmBackup,
             $ActiveSkillsBackup
         )) {
             if (Test-Path -LiteralPath $Backup) {
@@ -265,8 +271,8 @@ try {
         if (Test-Path -LiteralPath $ProfileDir -PathType Container) {
             Move-Item -LiteralPath $ProfileDir -Destination $ProfileBackup
         }
-        if (Test-Path -LiteralPath $CLIPath -PathType Leaf) {
-            Move-Item -LiteralPath $CLIPath -Destination $CLIBackup
+        if (Test-Path -LiteralPath $NpmPrefix -PathType Container) {
+            Move-Item -LiteralPath $NpmPrefix -Destination $NpmBackup
         }
         if (Test-Path -LiteralPath $ActiveSkillsDir -PathType Container) {
             Move-Item -LiteralPath $ActiveSkillsDir -Destination $ActiveSkillsBackup
@@ -290,36 +296,32 @@ try {
     Clear-TestDownloads
 }
 
-$PreviousVersion = $env:XPARSER_VERSION
-$PreviousInstallDir = $env:INSTALL_DIR
-try {
-    $env:XPARSER_VERSION = $Version
-    $env:INSTALL_DIR = Split-Path -Parent $CLIPath
-    $InstallerURL = "${DownloadBase}/${Version}/install.ps1"
-    Write-Host "正在安装 test CLI：${InstallerURL}"
-    $InstallerScript = (Invoke-WebRequest -Uri $InstallerURL -UseBasicParsing).Content
-    & ([ScriptBlock]::Create($InstallerScript))
-} finally {
-    if ($null -eq $PreviousVersion) {
-        Remove-Item Env:XPARSER_VERSION -ErrorAction SilentlyContinue
-    } else {
-        $env:XPARSER_VERSION = $PreviousVersion
+if (-not $env:XPARSE_TEST_ASSET_DIR) {
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+        throw "缺少 Node.js 18 或更高版本，无法安装 npm CLI。"
     }
-    if ($null -eq $PreviousInstallDir) {
-        Remove-Item Env:INSTALL_DIR -ErrorAction SilentlyContinue
-    } else {
-        $env:INSTALL_DIR = $PreviousInstallDir
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+        throw "缺少 npm，无法安装 xparse-cli。"
     }
-}
-if (-not (Test-Path -LiteralPath $CLIPath -PathType Leaf)) {
-    throw "test CLI 安装失败：未找到 ${CLIPath}。请执行恢复脚本。"
-}
-& $CLIPath --profile workbuddy config set base_url $ProfileBaseURL
-if ($LASTEXITCODE -ne 0) {
-    throw "CLI 无法写入 ${EnvironmentLabel} Profile。请执行恢复脚本。"
+    $NodeMajor = [int](& node -p "process.versions.node.split('.')[0]")
+    if ($NodeMajor -lt 18) {
+        throw "Node.js 版本过低（${NodeMajor}），xparse-cli 需要 Node.js 18 或更高版本。"
+    }
+    Write-Host "正在通过 npm 安装 test CLI：xparse-cli@${NpmVersion}"
+    & npm install --global --prefix $NpmPrefix "xparse-cli@${NpmVersion}"
+    if ($LASTEXITCODE -ne 0) {
+        throw "npm 安装 xparse-cli@${NpmVersion} 失败。请执行恢复脚本。"
+    }
+    if (-not (Test-Path -LiteralPath $CLIPath -PathType Leaf)) {
+        throw "test CLI 安装失败：未找到 ${CLIPath}。请执行恢复脚本。"
+    }
+    & $CLIPath --profile workbuddy config set base_url $ProfileBaseURL
+    if ($LASTEXITCODE -ne 0) {
+        throw "CLI 无法写入 ${EnvironmentLabel} Profile。请执行恢复脚本。"
+    }
 }
 
 Write-Host ""
-Write-Host "一键安装已完成：Connector、xparse-parse Skill、${EnvironmentLabel} CLI 和 Profile 均已就绪。"
+Write-Host "一键安装已完成：Connector、xparse-parse Skill、npm CLI ${NpmVersion} 和 ${EnvironmentLabel} Profile 均已就绪。"
 Write-Host "请完全退出并重新打开 WorkBuddy；需要验收登录归因时，再在 TextIn xParse 中点击“连接”。"
 Write-Host "测试结束后请执行对应版本目录中的 restore-workbuddy-production.ps1 恢复执行前状态。"

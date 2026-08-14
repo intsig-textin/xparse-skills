@@ -45,11 +45,14 @@ See [authentication.md](authentication.md) for all login modes and
 | Dimension | Free/automatic route | Explicit paid route |
 |-----------|----------------------|---------------------|
 | File types | PDF and supported images | Office, HTML, OFD, RTF, PDF, images, and other service-supported types |
-| Request limits | Read current page and MB limits from `xparse-cli quota`; the CLI splits eligible PDFs automatically | Service/account configuration is authoritative |
+| Request limits | Read current page and MB limits from `xparse-cli quota --output json`; the CLI splits eligible PDFs automatically | Service/account configuration is authoritative |
 | Allowance | Daily free pages, then authenticated free-package pages reported by quota | Existing server package/balance billing behavior |
 | Authentication | Anonymous or OAuth-attributed | OAuth Bearer or AppKey + Secret |
 
 > 遇到 40302（文件超限）、40307（每日额度用完）或 40303（格式不支持）时，参考 [error-handling.md](error-handling.md) 决定是否升级到付费 API。
+
+Agents should prefer JSON quota output so authentication, daily allowance,
+free-package counters, request limits, and reset time remain machine-readable.
 
 ## Output Views
 

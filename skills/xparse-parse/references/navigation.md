@@ -84,7 +84,7 @@ The `doc_id` is derived from the absolute local path. Preserve it exactly from
 | Element ID not found | Re-read the relevant outline/search result; do not guess |
 | Page range too large | Reduce `read_pages` to at most 20 pages |
 | Rate limited | Allow the CLI's bounded retry; retry manually once at most |
-| Free quota exhausted | Inspect `quota`, explain the available options, and obtain approval before paid use |
+| Free quota exhausted | Inspect `quota --output json`, explain the available options, and obtain approval before paid use |
 | Password-protected document | Ask the user for the password |
 
 There is no separate cache-preparation command. Recover a cache miss by parsing

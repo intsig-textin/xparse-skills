@@ -12,8 +12,8 @@ MARKETPLACE_ICON_BACKUP="${MARKETPLACE_ICON}.production.bak"
 CATALOG_BACKUP="${CATALOG_FILE}.textin-xparse.production.bak"
 PROFILE_DIR="${XPARSE_WORKBUDDY_PROFILE_DIR:-${HOME}/.xparse-cli/profiles/workbuddy}"
 PROFILE_BACKUP="${PROFILE_DIR}.production.bak"
-CLI_PATH="${XPARSE_CLI_PATH:-${HOME}/.local/bin/xparse-cli}"
-CLI_BACKUP="${CLI_PATH}.production.bak"
+NPM_PREFIX="${XPARSE_NPM_PREFIX:-${HOME}/.xparse-cli/npm}"
+NPM_BACKUP="${NPM_PREFIX}.production.bak"
 ACTIVE_SKILLS_DIR="${WORKBUDDY_CONNECTOR_SKILLS_DIR:-${HOME}/.workbuddy/connectors/skills/connector-textin-xparse}"
 ACTIVE_SKILLS_BACKUP="${ACTIVE_SKILLS_DIR}.production.bak"
 TIMESTAMP="$(date +%Y%m%d%H%M%S)"
@@ -21,7 +21,7 @@ TEST_BACKUP_ROOT="${WORKBUDDY_TEST_BACKUP_ROOT:-${MARKETPLACE_ROOT}/.textin-xpar
 CONNECTOR_TEST_BACKUP="${TEST_BACKUP_ROOT}/connector.${TIMESTAMP}"
 CATALOG_TEST_BACKUP="${TEST_BACKUP_ROOT}/connectors.${TIMESTAMP}.json"
 PROFILE_TEST_BACKUP="${PROFILE_DIR}.test.${TIMESTAMP}.bak"
-CLI_TEST_BACKUP="${CLI_PATH}.test.${TIMESTAMP}.bak"
+NPM_TEST_BACKUP="${NPM_PREFIX}.test.${TIMESTAMP}.bak"
 ACTIVE_SKILLS_TEST_BACKUP="${TEST_BACKUP_ROOT}/activated-skills.${TIMESTAMP}"
 MARKETPLACE_ICON_TEST_BACKUP="${TEST_BACKUP_ROOT}/marketplace-icon.${TIMESTAMP}.png"
 ORPHAN_RECOVERY_ROOT="${TEST_BACKUP_ROOT}/orphan-recovery.${TIMESTAMP}"
@@ -53,7 +53,7 @@ if [ ! -f "${CONNECTOR_DIR}/.workbuddy-test" ]; then
     "${CONNECTOR_BACKUP}" \
     "${MARKETPLACE_ICON_BACKUP}" \
     "${PROFILE_BACKUP}" \
-    "${CLI_BACKUP}" \
+    "${NPM_BACKUP}" \
     "${ACTIVE_SKILLS_BACKUP}"; do
     if [ -e "${backup}" ]; then
       ORPHANED_BACKUPS="${ORPHANED_BACKUPS}
@@ -76,7 +76,7 @@ if [ ! -f "${CONNECTOR_DIR}/.workbuddy-test" ]; then
     restore_orphaned_backup \
       "${PROFILE_DIR}" "${PROFILE_BACKUP}" "profile.current"
     restore_orphaned_backup \
-      "${CLI_PATH}" "${CLI_BACKUP}" "xparse-cli.current"
+      "${NPM_PREFIX}" "${NPM_BACKUP}" "npm-cli.current"
     restore_orphaned_backup \
       "${ACTIVE_SKILLS_DIR}" "${ACTIVE_SKILLS_BACKUP}" "activated-skills.current"
     printf '已自动恢复孤立备份，原当前状态已归档到：%s\n' \
@@ -96,7 +96,7 @@ for target in \
   "${CATALOG_TEST_BACKUP}" \
   "${MARKETPLACE_ICON_TEST_BACKUP}" \
   "${PROFILE_TEST_BACKUP}" \
-  "${CLI_TEST_BACKUP}" \
+  "${NPM_TEST_BACKUP}" \
   "${ACTIVE_SKILLS_TEST_BACKUP}"; do
   if [ -e "${target}" ]; then
     fail "本次恢复的归档目标已存在：${target}。请稍后重试。"
@@ -124,11 +124,11 @@ fi
 if [ -d "${PROFILE_BACKUP}" ]; then
   mv "${PROFILE_BACKUP}" "${PROFILE_DIR}"
 fi
-if [ -f "${CLI_PATH}" ]; then
-  mv "${CLI_PATH}" "${CLI_TEST_BACKUP}"
+if [ -d "${NPM_PREFIX}" ]; then
+  mv "${NPM_PREFIX}" "${NPM_TEST_BACKUP}"
 fi
-if [ -f "${CLI_BACKUP}" ]; then
-  mv "${CLI_BACKUP}" "${CLI_PATH}"
+if [ -d "${NPM_BACKUP}" ]; then
+  mv "${NPM_BACKUP}" "${NPM_PREFIX}"
 fi
 if [ -d "${ACTIVE_SKILLS_DIR}" ]; then
   mv "${ACTIVE_SKILLS_DIR}" "${ACTIVE_SKILLS_TEST_BACKUP}"
@@ -138,6 +138,6 @@ if [ -d "${ACTIVE_SKILLS_BACKUP}" ]; then
   mv "${ACTIVE_SKILLS_BACKUP}" "${ACTIVE_SKILLS_DIR}"
 fi
 
-printf '已恢复执行测试脚本前的 WorkBuddy marketplace、Connector、CLI、profile 和已激活 Skill 状态。\n'
+printf '已恢复执行测试脚本前的 WorkBuddy marketplace、Connector、npm CLI、profile 和已激活 Skill 状态。\n'
 printf '本次测试 Connector 已归档到：%s\n' "${CONNECTOR_TEST_BACKUP}"
 printf '\n请完全退出并重新打开 WorkBuddy，使恢复后的状态生效。\n'

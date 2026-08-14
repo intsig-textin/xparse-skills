@@ -2,10 +2,13 @@
 set -eu
 
 VERSION="${XPARSER_VERSION:-v2.2.0-workbuddy-test.3}"
+NPM_VERSION="${XPARSE_NPM_VERSION:-2.2.1-beta.1}"
 EXPECTED_AUTH_DOMAIN="${XPARSE_EXPECTED_AUTH_DOMAIN:-textin-sandbox.intsig.com}"
 PROFILE_BASE_URL="${XPARSE_PROFILE_BASE_URL:-https://textin-sandbox.intsig.com}"
 ENVIRONMENT_LABEL="${XPARSE_ENVIRONMENT_LABEL:-test}"
 DOWNLOAD_BASE="${XPARSER_DOWNLOAD_BASE:-https://dllf.intsig.net/download/2026/Solution/xparse-cli}"
+OFFLINE_MODE="${XPARSE_OFFLINE_MODE:-0}"
+LOCAL_CLI_FILE="${XPARSE_LOCAL_CLI_FILE:-}"
 MARKETPLACE_ROOT="${WORKBUDDY_MARKETPLACE_ROOT:-${HOME}/.workbuddy/connectors-marketplace}"
 CATALOG_FILE="${WORKBUDDY_CONNECTOR_CATALOG:-${MARKETPLACE_ROOT}/.codebuddy-connector/connectors.json}"
 CONNECTORS_DIR="${WORKBUDDY_CONNECTORS_DIR:-${MARKETPLACE_ROOT}/connectors}"
@@ -17,8 +20,9 @@ MARKETPLACE_ICON_BACKUP="${MARKETPLACE_ICON}.production.bak"
 CATALOG_BACKUP="${CATALOG_FILE}.textin-xparse.production.bak"
 PROFILE_DIR="${XPARSE_WORKBUDDY_PROFILE_DIR:-${HOME}/.xparse-cli/profiles/workbuddy}"
 PROFILE_BACKUP="${PROFILE_DIR}.production.bak"
-CLI_PATH="${XPARSE_CLI_PATH:-${HOME}/.local/bin/xparse-cli}"
-CLI_BACKUP="${CLI_PATH}.production.bak"
+NPM_PREFIX="${XPARSE_NPM_PREFIX:-${HOME}/.xparse-cli/npm}"
+NPM_BACKUP="${NPM_PREFIX}.production.bak"
+CLI_PATH="${XPARSE_CLI_PATH:-${NPM_PREFIX}/bin/xparse-cli}"
 ACTIVE_SKILLS_DIR="${WORKBUDDY_CONNECTOR_SKILLS_DIR:-${HOME}/.workbuddy/connectors/skills/connector-textin-xparse}"
 ACTIVE_SKILLS_BACKUP="${ACTIVE_SKILLS_DIR}.production.bak"
 STAGE_DIR="${CONNECTORS_DIR}/.textin-xparse.test-download.$$"
@@ -31,6 +35,15 @@ fail() {
   printf '错误：%s\n' "$*" >&2
   exit 1
 }
+
+if [ "${OFFLINE_MODE}" = "1" ]; then
+  if [ -z "${XPARSE_TEST_ASSET_DIR:-}" ]; then
+    fail "离线模式需要 XPARSE_TEST_ASSET_DIR。"
+  fi
+  if [ -z "${LOCAL_CLI_FILE}" ]; then
+    fail "离线模式需要 XPARSE_LOCAL_CLI_FILE。"
+  fi
+fi
 
 cleanup() {
   for path in "${CATALOG_DOWNLOAD}" "${ENTRY_DOWNLOAD}"; do
@@ -153,7 +166,7 @@ else
     "${CONNECTOR_BACKUP}" \
     "${MARKETPLACE_ICON_BACKUP}" \
     "${PROFILE_BACKUP}" \
-    "${CLI_BACKUP}" \
+    "${NPM_BACKUP}" \
     "${ACTIVE_SKILLS_BACKUP}"; do
     if [ -e "${backup}" ]; then
       fail "检测到未恢复的备份：${backup}。请先运行恢复脚本。"
@@ -209,8 +222,8 @@ PYTHON
   if [ -d "${PROFILE_DIR}" ]; then
     mv "${PROFILE_DIR}" "${PROFILE_BACKUP}"
   fi
-  if [ -f "${CLI_PATH}" ]; then
-    mv "${CLI_PATH}" "${CLI_BACKUP}"
+  if [ -d "${NPM_PREFIX}" ]; then
+    mv "${NPM_PREFIX}" "${NPM_BACKUP}"
   fi
   if [ -d "${ACTIVE_SKILLS_DIR}" ]; then
     mv "${ACTIVE_SKILLS_DIR}" "${ACTIVE_SKILLS_BACKUP}"
@@ -224,13 +237,29 @@ PYTHON
   printf '已注入 TextIn xParse test Connector，并备份执行前的 WorkBuddy 状态。\n'
 fi
 
-if [ -z "${XPARSE_TEST_ASSET_DIR:-}" ]; then
-  INSTALLER_URL="${DOWNLOAD_BASE}/${VERSION}/install.sh"
-  printf '正在安装 %s CLI：%s\n' "${ENVIRONMENT_LABEL}" "${INSTALLER_URL}"
-  curl -fsSL "${INSTALLER_URL}" |
-    env XPARSER_VERSION="${VERSION}" \
-      XPARSER_BASE_URL="${DOWNLOAD_BASE}" \
-      INSTALL_DIR="$(dirname "${CLI_PATH}")" sh
+if [ -n "${LOCAL_CLI_FILE}" ]; then
+  if [ ! -f "${LOCAL_CLI_FILE}" ]; then
+    fail "未找到本地 CLI：${LOCAL_CLI_FILE}。"
+  fi
+  mkdir -p "$(dirname "${CLI_PATH}")"
+  cp "${LOCAL_CLI_FILE}" "${CLI_PATH}"
+  chmod 0755 "${CLI_PATH}"
+  printf '已安装包内 %s CLI：%s\n' "${ENVIRONMENT_LABEL}" "${CLI_PATH}"
+elif [ -z "${XPARSE_TEST_ASSET_DIR:-}" ]; then
+  command -v node >/dev/null 2>&1 ||
+    fail "缺少 Node.js 18 或更高版本，无法安装 npm CLI。"
+  command -v npm >/dev/null 2>&1 ||
+    fail "缺少 npm，无法安装 xparse-cli。"
+  NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]")"
+  if [ "${NODE_MAJOR}" -lt 18 ]; then
+    fail "Node.js 版本过低（${NODE_MAJOR}），xparse-cli 需要 Node.js 18 或更高版本。"
+  fi
+  printf '正在通过 npm 安装 %s CLI：xparse-cli@%s\n' \
+    "${ENVIRONMENT_LABEL}" "${NPM_VERSION}"
+  npm install --global --prefix "${NPM_PREFIX}" "xparse-cli@${NPM_VERSION}" ||
+    fail "npm 安装 xparse-cli@${NPM_VERSION} 失败。请执行恢复脚本。"
+fi
+if [ -n "${LOCAL_CLI_FILE}" ] || [ -z "${XPARSE_TEST_ASSET_DIR:-}" ]; then
   if [ ! -x "${CLI_PATH}" ]; then
     fail "CLI 安装失败：未找到 ${CLI_PATH}。请执行恢复脚本。"
   fi
@@ -239,5 +268,5 @@ if [ -z "${XPARSE_TEST_ASSET_DIR:-}" ]; then
 fi
 
 printf '\n请完全退出并重新打开 WorkBuddy，然后在 TextIn xParse 中点击“连接”。\n'
-printf 'WorkBuddy 将安装唯一的 xparse-parse Skill、指定 %s 版 CLI，并打开 TextIn %s 环境授权页。\n' "${ENVIRONMENT_LABEL}" "${ENVIRONMENT_LABEL}"
+printf 'WorkBuddy 将安装唯一的 xparse-parse Skill、npm CLI %s，并打开 TextIn %s 环境授权页。\n' "${NPM_VERSION}" "${ENVIRONMENT_LABEL}"
 printf '测试结束后请运行 restore-workbuddy-production.sh 恢复执行前状态。\n'

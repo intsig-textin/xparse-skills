@@ -1,23 +1,23 @@
 {
   "init": {
-    "darwin": "curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/v2.2.0-workbuddy-test.3/install.sh | env XPARSER_VERSION=v2.2.0-workbuddy-test.3 sh && \"$HOME/.local/bin/xparse-cli\" --profile workbuddy config set base_url https://textin-sandbox.intsig.com",
-    "linux": "curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/v2.2.0-workbuddy-test.3/install.sh | env XPARSER_VERSION=v2.2.0-workbuddy-test.3 sh && \"$HOME/.local/bin/xparse-cli\" --profile workbuddy config set base_url https://textin-sandbox.intsig.com",
-    "win32": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:XPARSER_VERSION='v2.2.0-workbuddy-test.3'; irm https://dllf.intsig.net/download/2026/Solution/xparse-cli/v2.2.0-workbuddy-test.3/install.ps1 | iex; & \\\"$env:USERPROFILE\\.xparse-cli\\bin\\xparse-cli.exe\\\" --profile workbuddy config set base_url https://textin-sandbox.intsig.com\""
+    "darwin": "node -e \"if(Number(process.versions.node.split('.')[0])<18)process.exit(1)\" && npm install --global --prefix \"$HOME/.xparse-cli/npm\" xparse-cli@2.2.1-beta.1 && \"$HOME/.xparse-cli/npm/bin/xparse-cli\" --profile workbuddy config set base_url https://textin-sandbox.intsig.com",
+    "linux": "node -e \"if(Number(process.versions.node.split('.')[0])<18)process.exit(1)\" && npm install --global --prefix \"$HOME/.xparse-cli/npm\" xparse-cli@2.2.1-beta.1 && \"$HOME/.xparse-cli/npm/bin/xparse-cli\" --profile workbuddy config set base_url https://textin-sandbox.intsig.com",
+    "win32": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"node -e \\\"if(Number(process.versions.node.split('.')[0])<18)process.exit(1)\\\"; if ($LASTEXITCODE -ne 0) { throw 'Node.js 18 or newer is required' }; npm install --global --prefix \\\"$env:USERPROFILE\\.xparse-cli\\npm\\\" xparse-cli@2.2.1-beta.1; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & \\\"$env:USERPROFILE\\.xparse-cli\\npm\\xparse-cli.cmd\\\" --profile workbuddy config set base_url https://textin-sandbox.intsig.com\""
   },
   "auth": {
-    "darwin": "\"$HOME/.local/bin/xparse-cli\" --profile workbuddy auth device --open-browser=always --output=jsonl",
-    "linux": "\"$HOME/.local/bin/xparse-cli\" --profile workbuddy auth device --open-browser=always --output=jsonl",
-    "win32": "\"%USERPROFILE%\\.xparse-cli\\bin\\xparse-cli.exe\" --profile workbuddy auth device --open-browser=always --output=jsonl"
+    "darwin": "\"$HOME/.xparse-cli/npm/bin/xparse-cli\" --profile workbuddy auth device --open-browser=always --output=jsonl",
+    "linux": "\"$HOME/.xparse-cli/npm/bin/xparse-cli\" --profile workbuddy auth device --open-browser=always --output=jsonl",
+    "win32": "\"%USERPROFILE%\\.xparse-cli\\npm\\xparse-cli.cmd\" --profile workbuddy auth device --open-browser=always --output=jsonl"
   },
   "unAuth": {
-    "darwin": "\"$HOME/.local/bin/xparse-cli\" --profile workbuddy auth logout --method oauth",
-    "linux": "\"$HOME/.local/bin/xparse-cli\" --profile workbuddy auth logout --method oauth",
-    "win32": "\"%USERPROFILE%\\.xparse-cli\\bin\\xparse-cli.exe\" --profile workbuddy auth logout --method oauth"
+    "darwin": "\"$HOME/.xparse-cli/npm/bin/xparse-cli\" --profile workbuddy auth logout --method oauth",
+    "linux": "\"$HOME/.xparse-cli/npm/bin/xparse-cli\" --profile workbuddy auth logout --method oauth",
+    "win32": "\"%USERPROFILE%\\.xparse-cli\\npm\\xparse-cli.cmd\" --profile workbuddy auth logout --method oauth"
   },
   "status": {
-    "darwin": "\"$HOME/.local/bin/xparse-cli\" --profile workbuddy auth status --output=json",
-    "linux": "\"$HOME/.local/bin/xparse-cli\" --profile workbuddy auth status --output=json",
-    "win32": "\"%USERPROFILE%\\.xparse-cli\\bin\\xparse-cli.exe\" --profile workbuddy auth status --output=json"
+    "darwin": "\"$HOME/.xparse-cli/npm/bin/xparse-cli\" --profile workbuddy auth status --output=json",
+    "linux": "\"$HOME/.xparse-cli/npm/bin/xparse-cli\" --profile workbuddy auth status --output=json",
+    "win32": "\"%USERPROFILE%\\.xparse-cli\\npm\\xparse-cli.cmd\" --profile workbuddy auth status --output=json"
   },
   "statusMatchJson": {
     "logged_in": "true",
@@ -29,11 +29,11 @@
   },
   "versionCheck": {
     "command": {
-      "darwin": "\"$HOME/.local/bin/xparse-cli\" version",
-      "linux": "\"$HOME/.local/bin/xparse-cli\" version",
-      "win32": "\"%USERPROFILE%\\.xparse-cli\\bin\\xparse-cli.exe\" version"
+      "darwin": "\"$HOME/.xparse-cli/npm/bin/xparse-cli\" version",
+      "linux": "\"$HOME/.xparse-cli/npm/bin/xparse-cli\" version",
+      "win32": "\"%USERPROFILE%\\.xparse-cli\\npm\\xparse-cli.cmd\" version"
     },
-    "minVersion": "2.2.0",
+    "minVersion": "2.2.1",
     "versionPattern": "xparse-cli version v?(\\d+\\.\\d+\\.\\d+)"
   },
   "authDeviceFlow": {

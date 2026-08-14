@@ -26,7 +26,7 @@
 | `enable-workbuddy-test.ps1` | Windows | 备份正式状态并注入测试 Connector |
 | `restore-workbuddy-production.ps1` | Windows | 恢复正式状态并归档测试版本 |
 
-脚本默认测试 `v2.2.0-workbuddy-test.3`，并从以下不可变版本目录下载资源：
+脚本默认从 `v2.2.0-workbuddy-test.3` 不可变目录下载 Connector 资源，并通过 npm 安装固定的 `xparse-cli@2.2.1-beta.1`：
 
 ```text
 https://dllf.intsig.net/download/2026/Solution/xparse-cli/<version>/
@@ -177,27 +177,27 @@ $env:XPARSE_TEST_ASSET_DIR = "C:\path\to\workbuddy-test-assets"
 必要时可在终端只读检查 WorkBuddy Profile：
 
 ```bash
-"$HOME/.local/bin/xparse-cli" --profile workbuddy auth status --output=json
-"$HOME/.local/bin/xparse-cli" version
+"$HOME/.xparse-cli/npm/bin/xparse-cli" --profile workbuddy auth status --output=json
+"$HOME/.xparse-cli/npm/bin/xparse-cli" version
 ```
 
 Windows：
 
 ```powershell
-& "$env:USERPROFILE\.xparse-cli\bin\xparse-cli.exe" `
+& "$env:USERPROFILE\.xparse-cli\npm\xparse-cli.cmd" `
   --profile workbuddy auth status --output=json
-& "$env:USERPROFILE\.xparse-cli\bin\xparse-cli.exe" version
+& "$env:USERPROFILE\.xparse-cli\npm\xparse-cli.cmd" version
 ```
 
 不要打印、复制或记录 OAuth access token、refresh token 或 AppKey。
 
 ### 解析
 
-1. 让 WorkBuddy 使用小文件执行免费解析，确认默认使用 `--api free` 并正常返回 Markdown。
+1. 先运行 `quota --output json`，再让 WorkBuddy 使用小文件执行自动解析；确认默认使用 `--api auto`，能够读取 test 环境实时 quota 并正常返回 Markdown。
 2. 在获得用户明确同意后执行付费 OAuth 解析，确认 `--api paid --auth-method oauth` 可用。
 3. 确认 WorkBuddy 中的命令都显式使用 `--profile workbuddy`。
 4. 通过服务端日志或统计记录确认解析请求的 `X-From` 为 `workbuddy`。OAuth `/oauth21/token` 轮询本身不携带该请求头。
-5. 确认免费额度不足时不会自动切换付费接口；必须停止并征得用户同意。
+5. 确认 `auto` 能识别每日免费额度和登录用户免费套餐；两者不足时必须停止，不能未经同意改成显式 `--api paid`。
 
 ## 6. 恢复测试前状态
 
@@ -264,7 +264,7 @@ Windows 回滚脚本使用相同的归档后恢复策略。
 
 ### 刷新测试版本
 
-再次运行启用脚本会刷新现有测试 Connector，但不会覆盖最初保存的正式备份。更换版本时应显式设置 `XPARSER_VERSION`，并确保该版本目录中的 Connector 配置与 CLI 安装版本一致。
+再次运行启用脚本会刷新现有测试 Connector，但不会覆盖最初保存的正式备份。更换 Connector 资源版本时设置 `XPARSER_VERSION`；更换 npm CLI 时设置 `XPARSE_NPM_VERSION`，并确保 `cli.test.json` 固定到同一 npm 版本。
 
 ## 8. 可覆盖的路径变量
 
@@ -273,6 +273,7 @@ Windows 回滚脚本使用相同的归档后恢复策略。
 | 变量 | 用途 |
 |------|------|
 | `XPARSER_VERSION` | 不可变测试版本号 |
+| `XPARSE_NPM_VERSION` | 固定安装的 npm beta 版本，默认 `2.2.1-beta.1` |
 | `XPARSER_DOWNLOAD_BASE` | 测试资源下载根地址 |
 | `XPARSE_TEST_ASSET_DIR` | 本地测试资源目录 |
 | `WORKBUDDY_MARKETPLACE_ROOT` | WorkBuddy marketplace 根目录 |

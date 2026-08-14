@@ -48,7 +48,7 @@ npm install --global xparse-cli@2.2.1-beta.1
 | Command | Description |
 |---------|-------------|
 | `xparse-cli parse <file>` | Parse a document to Markdown or JSON |
-| `xparse-cli quota` | Show current daily free and authenticated free-package quota |
+| `xparse-cli quota --output json` | Show current daily free and authenticated free-package quota |
 | `xparse-cli get_doc_info <file>` | Create the stable local document ID for navigation |
 | `xparse-cli get_outline <doc_id>` | Navigate the cached document outline |
 | `xparse-cli search_text <doc_id> <pattern>` | Search cached document content |
@@ -64,7 +64,8 @@ npm install --global xparse-cli@2.2.1-beta.1
 | `--api free` | Force the free endpoint only |
 | `--api paid` | Explicit paid route; requires user approval and valid OAuth/AppKey credentials |
 
-Run `xparse-cli quota` for current page and file-size limits instead of relying on hardcoded values.
+Run `xparse-cli quota --output json` for current authentication, allowance, page,
+and file-size limits instead of relying on hardcoded values.
 
 > Full CLI documentation: [cli/README.md](cli/README.md)
 

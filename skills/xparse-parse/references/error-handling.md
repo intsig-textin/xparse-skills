@@ -7,7 +7,7 @@ Use this matrix to decide whether to STOP, RETRY, or CONFIGURE:
 | Error Category | Error Codes | Decision | Action |
 |---|---|---|---|
 | **Transient/Network** | 30203, 500, 50207 | RETRY (once) | Retry same command with backoff |
-| **Automatic Free Sources Exhausted** | 40307 | INSPECT + STOP + ASK | Run `quota`, explain daily/free-package availability, then ask whether to wait or explicitly use the paid API |
+| **Automatic Free Sources Exhausted** | 40307 | INSPECT + STOP + ASK | Run `quota --output json`, explain daily/free-package availability, then ask whether to wait or explicitly use the paid API |
 | **Rate Limit** | 40306 | RETRY (with delay) | Reduce request frequency, retry later |
 | **File Size Exceeded** | 40302 | STOP + ASK or ADJUST | Suggest `--page-range`; ask before an explicit `--api paid` retry |
 | **Invalid Credentials** | 40101, 40102, 40103 | STOP + DEBUG | AppKey users check TextIn console; OAuth users log in again |
@@ -69,7 +69,7 @@ User: xparse-cli parse large-document.pdf --api auto
 Error: 40307 (Available free quota is insufficient)
 
 Agent action:
-1. Run `xparse-cli quota` to obtain the current daily and authenticated
+1. Run `xparse-cli quota --output json` to obtain the current daily and authenticated
    free-package values.
 2. Do not retry the same parse when those sources are insufficient.
 3. Explain the reported values and reset time.

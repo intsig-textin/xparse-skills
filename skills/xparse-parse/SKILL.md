@@ -51,7 +51,7 @@ snapshot.
 Authentication is identity, not permission to spend. Never choose `--api paid`
 only because OAuth or AppKey credentials exist.
 
-Run `xparse-cli quota` when the user asks about quota, when a routing failure
+Run `xparse-cli quota --output json` when the user asks about quota, when a routing failure
 needs explanation, or before proposing a paid retry. Read all returned facts:
 
 - daily free pages remaining and reset time;
@@ -140,7 +140,7 @@ navigation or extraction.
 | Parse selected pages only | `xparse-cli parse <FILE> --api auto --page-range 1-5` |
 | Encrypted document | `xparse-cli parse <FILE> --api auto --password <PWD>` |
 | Character details | `xparse-cli parse <FILE> --api auto --view json --output <DIR> --include-char-details` |
-| Show current quota | `xparse-cli quota` |
+| Show current quota | `xparse-cli quota --output json` |
 | Start local navigation | `xparse-cli get_doc_info <FILE>` |
 | Show cached outline | `xparse-cli get_outline <DOC_ID>` |
 | Search cached text | `xparse-cli search_text <DOC_ID> <PATTERN>` |

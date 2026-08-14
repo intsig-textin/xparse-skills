@@ -1037,7 +1037,8 @@ func TestSkillUsesFormalCLIWithoutCredentialCollection(t *testing.T) {
 		t.Fatal("WorkBuddy Skill does not select the isolated WorkBuddy profile")
 	}
 	if !strings.Contains(skill, "Use `--api auto` by default") ||
-		!strings.Contains(skill, "Authentication is identity, not permission to spend") {
+		!strings.Contains(skill, "Authentication is identity, not permission to spend") ||
+		!strings.Contains(skill, "quota --output json") {
 		t.Fatal("WorkBuddy Skill does not default to quota-aware automatic routing")
 	}
 	for _, taskContextContract := range []string{
