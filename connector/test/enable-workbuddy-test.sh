@@ -2,13 +2,13 @@
 set -eu
 
 VERSION="${XPARSER_VERSION:-v2.2.0-workbuddy-test.3}"
-NPM_VERSION="${XPARSE_NPM_VERSION:-2.2.1-beta.1}"
+NPM_VERSION="${XPARSE_NPM_VERSION:-2.2.1-beta.2}"
+NPM_REGISTRY="${XPARSE_NPM_REGISTRY:-https://registry.npmmirror.com}"
+INSTALL_CLI_WITH_LOCAL_ASSETS="${XPARSE_INSTALL_CLI_WITH_LOCAL_ASSETS:-0}"
 EXPECTED_AUTH_DOMAIN="${XPARSE_EXPECTED_AUTH_DOMAIN:-textin-sandbox.intsig.com}"
 PROFILE_BASE_URL="${XPARSE_PROFILE_BASE_URL:-https://textin-sandbox.intsig.com}"
 ENVIRONMENT_LABEL="${XPARSE_ENVIRONMENT_LABEL:-test}"
 DOWNLOAD_BASE="${XPARSER_DOWNLOAD_BASE:-https://dllf.intsig.net/download/2026/Solution/xparse-cli}"
-OFFLINE_MODE="${XPARSE_OFFLINE_MODE:-0}"
-LOCAL_CLI_FILE="${XPARSE_LOCAL_CLI_FILE:-}"
 MARKETPLACE_ROOT="${WORKBUDDY_MARKETPLACE_ROOT:-${HOME}/.workbuddy/connectors-marketplace}"
 CATALOG_FILE="${WORKBUDDY_CONNECTOR_CATALOG:-${MARKETPLACE_ROOT}/.codebuddy-connector/connectors.json}"
 CONNECTORS_DIR="${WORKBUDDY_CONNECTORS_DIR:-${MARKETPLACE_ROOT}/connectors}"
@@ -23,6 +23,11 @@ PROFILE_BACKUP="${PROFILE_DIR}.production.bak"
 NPM_PREFIX="${XPARSE_NPM_PREFIX:-${HOME}/.xparse-cli/npm}"
 NPM_BACKUP="${NPM_PREFIX}.production.bak"
 CLI_PATH="${XPARSE_CLI_PATH:-${NPM_PREFIX}/bin/xparse-cli}"
+COMMAND_DIR="${XPARSE_COMMAND_DIR:-${HOME}/.local/bin}"
+COMMAND_PATH="${COMMAND_DIR}/xparse-cli"
+COMMAND_BACKUP="${COMMAND_PATH}.production.bak"
+COMMAND_MARKER="${COMMAND_PATH}.workbuddy-npm"
+PATH_MARKER="${XPARSE_PATH_MARKER:-${HOME}/.xparse-cli/workbuddy-command-path.added}"
 ACTIVE_SKILLS_DIR="${WORKBUDDY_CONNECTOR_SKILLS_DIR:-${HOME}/.workbuddy/connectors/skills/connector-textin-xparse}"
 ACTIVE_SKILLS_BACKUP="${ACTIVE_SKILLS_DIR}.production.bak"
 STAGE_DIR="${CONNECTORS_DIR}/.textin-xparse.test-download.$$"
@@ -36,14 +41,47 @@ fail() {
   exit 1
 }
 
-if [ "${OFFLINE_MODE}" = "1" ]; then
-  if [ -z "${XPARSE_TEST_ASSET_DIR:-}" ]; then
-    fail "离线模式需要 XPARSE_TEST_ASSET_DIR。"
+install_command_launcher() {
+  mkdir -p "${COMMAND_DIR}"
+  if [ ! -f "${COMMAND_MARKER}" ]; then
+    if [ -e "${COMMAND_BACKUP}" ] || [ -L "${COMMAND_BACKUP}" ]; then
+      fail "检测到未恢复的命令行入口备份：${COMMAND_BACKUP}。请先运行恢复脚本。"
+    fi
+    if [ -e "${COMMAND_PATH}" ] || [ -L "${COMMAND_PATH}" ]; then
+      mv "${COMMAND_PATH}" "${COMMAND_BACKUP}"
+    fi
+  elif [ -e "${COMMAND_PATH}" ] || [ -L "${COMMAND_PATH}" ]; then
+    rm -f "${COMMAND_PATH}"
   fi
-  if [ -z "${LOCAL_CLI_FILE}" ]; then
-    fail "离线模式需要 XPARSE_LOCAL_CLI_FILE。"
+  ln -s "${CLI_PATH}" "${COMMAND_PATH}"
+  printf '%s\n' "npm:${NPM_VERSION}" > "${COMMAND_MARKER}"
+
+  case ":${PATH}:" in
+    *:"${COMMAND_DIR}":*) path_needs_persist=0 ;;
+    *) path_needs_persist=1 ;;
+  esac
+  if [ "${path_needs_persist}" = "1" ]; then
+    export PATH="${COMMAND_DIR}:${PATH}"
+    if [ ! -f "${PATH_MARKER}" ]; then
+      case "$(basename "${SHELL:-sh}")" in
+        zsh) shell_profile="${HOME}/.zshrc" ;;
+        bash) shell_profile="${HOME}/.bashrc" ;;
+        fish) shell_profile="${HOME}/.config/fish/config.fish" ;;
+        *) shell_profile="${HOME}/.profile" ;;
+      esac
+      mkdir -p "$(dirname "${shell_profile}")" "$(dirname "${PATH_MARKER}")"
+      if [ "$(basename "${SHELL:-sh}")" = "fish" ]; then
+        path_line="set -gx PATH \"${COMMAND_DIR}\" \$PATH"
+      else
+        path_line="export PATH=\"${COMMAND_DIR}:\$PATH\""
+      fi
+      printf '\n# Added by xparse-cli WorkBuddy npm launcher\n%s\n' "${path_line}" >> "${shell_profile}"
+      printf '%s\n%s\n' "${shell_profile}" "${path_line}" > "${PATH_MARKER}"
+    fi
   fi
-fi
+  env -u NODE_OPTIONS "${COMMAND_PATH}" version >/dev/null 2>&1 ||
+    fail "命令行入口无法启动 xparse-cli。请执行恢复脚本。"
+}
 
 cleanup() {
   for path in "${CATALOG_DOWNLOAD}" "${ENTRY_DOWNLOAD}"; do
@@ -121,6 +159,45 @@ fi
 
 printf '%s\n' "${VERSION}" > "${STAGE_DIR}/.workbuddy-test"
 
+if command -v ruby >/dev/null 2>&1; then
+  ruby -rjson - "${CATALOG_FILE}" "${ENTRY_DOWNLOAD}" "${CATALOG_DOWNLOAD}" <<'RUBY'
+catalog_path, entry_path, output_path = ARGV
+catalog = JSON.parse(File.read(catalog_path, encoding: "UTF-8"))
+entry = JSON.parse(File.read(entry_path, encoding: "UTF-8"))
+connectors = catalog["connectors"]
+raise "connectors must be an array" unless connectors.is_a?(Array)
+catalog["connectors"] = [entry] + connectors.reject { |item| item["id"] == entry["id"] }
+File.write(output_path, JSON.pretty_generate(catalog) + "\n", mode: "w:UTF-8")
+RUBY
+elif command -v python3 >/dev/null 2>&1; then
+  python3 - "${CATALOG_FILE}" "${ENTRY_DOWNLOAD}" "${CATALOG_DOWNLOAD}" <<'PYTHON'
+import json
+import sys
+
+catalog_path, entry_path, output_path = sys.argv[1:]
+with open(catalog_path, encoding="utf-8") as source:
+    catalog = json.load(source)
+with open(entry_path, encoding="utf-8") as source:
+    entry = json.load(source)
+connectors = catalog.get("connectors")
+if not isinstance(connectors, list):
+    raise ValueError("connectors must be an array")
+catalog["connectors"] = [entry] + [
+    item for item in connectors if item.get("id") != entry["id"]
+]
+with open(output_path, "w", encoding="utf-8") as destination:
+    json.dump(catalog, destination, ensure_ascii=False, indent=2)
+    destination.write("\n")
+PYTHON
+else
+  fail "缺少可用的 JSON 解析器；macOS 需要 ruby，Linux 需要 ruby 或 python3。"
+fi
+
+if command -v plutil >/dev/null 2>&1; then
+  plutil -convert xml1 -o /dev/null "${CATALOG_DOWNLOAD}" ||
+    fail "更新后的 WorkBuddy Connector 注册表不是有效 JSON。"
+fi
+
 if [ -f "${MARKER_FILE}" ]; then
   OLD_SKILLS="${CONNECTOR_DIR}/skills.test-refresh.$$"
   ACTIVE_REFRESH="${ACTIVE_SKILLS_DIR}.test-refresh.$$"
@@ -159,6 +236,7 @@ if [ -f "${MARKER_FILE}" ]; then
     find "${ACTIVE_REFRESH}" -depth -delete
   fi
   mv "${STAGE_DIR}/.workbuddy-test" "${MARKER_FILE}"
+  mv "${CATALOG_DOWNLOAD}" "${CATALOG_FILE}"
   printf 'WorkBuddy 已安装 TextIn xParse test Connector，文件已刷新。\n'
 else
   for backup in \
@@ -167,50 +245,14 @@ else
     "${MARKETPLACE_ICON_BACKUP}" \
     "${PROFILE_BACKUP}" \
     "${NPM_BACKUP}" \
+    "${COMMAND_BACKUP}" \
+    "${COMMAND_MARKER}" \
+    "${PATH_MARKER}" \
     "${ACTIVE_SKILLS_BACKUP}"; do
     if [ -e "${backup}" ]; then
       fail "检测到未恢复的备份：${backup}。请先运行恢复脚本。"
     fi
   done
-
-  if grep -q '"id"[[:space:]]*:[[:space:]]*"textin-xparse"' "${CATALOG_FILE}"; then
-    cp "${CATALOG_FILE}" "${CATALOG_DOWNLOAD}"
-  elif command -v ruby >/dev/null 2>&1; then
-    ruby -rjson - "${CATALOG_FILE}" "${ENTRY_DOWNLOAD}" "${CATALOG_DOWNLOAD}" <<'RUBY'
-catalog_path, entry_path, output_path = ARGV
-catalog = JSON.parse(File.read(catalog_path, encoding: "UTF-8"))
-entry = JSON.parse(File.read(entry_path, encoding: "UTF-8"))
-connectors = catalog["connectors"]
-raise "connectors must be an array" unless connectors.is_a?(Array)
-connectors.unshift(entry)
-File.write(output_path, JSON.pretty_generate(catalog) + "\n", mode: "w:UTF-8")
-RUBY
-  elif command -v python3 >/dev/null 2>&1; then
-    python3 - "${CATALOG_FILE}" "${ENTRY_DOWNLOAD}" "${CATALOG_DOWNLOAD}" <<'PYTHON'
-import json
-import sys
-
-catalog_path, entry_path, output_path = sys.argv[1:]
-with open(catalog_path, encoding="utf-8") as source:
-    catalog = json.load(source)
-with open(entry_path, encoding="utf-8") as source:
-    entry = json.load(source)
-connectors = catalog.get("connectors")
-if not isinstance(connectors, list):
-    raise ValueError("connectors must be an array")
-connectors.insert(0, entry)
-with open(output_path, "w", encoding="utf-8") as destination:
-    json.dump(catalog, destination, ensure_ascii=False, indent=2)
-    destination.write("\n")
-PYTHON
-  else
-    fail "缺少可用的 JSON 解析器；macOS 需要 ruby，Linux 需要 ruby 或 python3。"
-  fi
-
-  if command -v plutil >/dev/null 2>&1; then
-    plutil -convert xml1 -o /dev/null "${CATALOG_DOWNLOAD}" ||
-      fail "更新后的 WorkBuddy Connector 注册表不是有效 JSON。"
-  fi
 
   cp -p "${CATALOG_FILE}" "${CATALOG_BACKUP}"
   if [ -d "${CONNECTOR_DIR}" ]; then
@@ -222,7 +264,8 @@ PYTHON
   if [ -d "${PROFILE_DIR}" ]; then
     mv "${PROFILE_DIR}" "${PROFILE_BACKUP}"
   fi
-  if [ -d "${NPM_PREFIX}" ]; then
+  if { [ -z "${XPARSE_TEST_ASSET_DIR:-}" ] || [ "${INSTALL_CLI_WITH_LOCAL_ASSETS}" = "1" ]; } &&
+    [ -d "${NPM_PREFIX}" ]; then
     mv "${NPM_PREFIX}" "${NPM_BACKUP}"
   fi
   if [ -d "${ACTIVE_SKILLS_DIR}" ]; then
@@ -237,36 +280,30 @@ PYTHON
   printf '已注入 TextIn xParse test Connector，并备份执行前的 WorkBuddy 状态。\n'
 fi
 
-if [ -n "${LOCAL_CLI_FILE}" ]; then
-  if [ ! -f "${LOCAL_CLI_FILE}" ]; then
-    fail "未找到本地 CLI：${LOCAL_CLI_FILE}。"
-  fi
-  mkdir -p "$(dirname "${CLI_PATH}")"
-  cp "${LOCAL_CLI_FILE}" "${CLI_PATH}"
-  chmod 0755 "${CLI_PATH}"
-  printf '已安装包内 %s CLI：%s\n' "${ENVIRONMENT_LABEL}" "${CLI_PATH}"
-elif [ -z "${XPARSE_TEST_ASSET_DIR:-}" ]; then
+if [ -z "${XPARSE_TEST_ASSET_DIR:-}" ] || [ "${INSTALL_CLI_WITH_LOCAL_ASSETS}" = "1" ]; then
   command -v node >/dev/null 2>&1 ||
     fail "缺少 Node.js 18 或更高版本，无法安装 npm CLI。"
   command -v npm >/dev/null 2>&1 ||
     fail "缺少 npm，无法安装 xparse-cli。"
-  NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]")"
+  NODE_MAJOR="$(env -u NODE_OPTIONS node -p "process.versions.node.split('.')[0]")"
   if [ "${NODE_MAJOR}" -lt 18 ]; then
     fail "Node.js 版本过低（${NODE_MAJOR}），xparse-cli 需要 Node.js 18 或更高版本。"
   fi
-  printf '正在通过 npm 安装 %s CLI：xparse-cli@%s\n' \
-    "${ENVIRONMENT_LABEL}" "${NPM_VERSION}"
-  npm install --global --prefix "${NPM_PREFIX}" "xparse-cli@${NPM_VERSION}" ||
+  printf '正在通过 npm 安装 %s CLI：xparse-cli@%s（%s）\n' \
+    "${ENVIRONMENT_LABEL}" "${NPM_VERSION}" "${NPM_REGISTRY}"
+  env -u NODE_OPTIONS npm install --global --prefix "${NPM_PREFIX}" \
+    "--registry=${NPM_REGISTRY}" "xparse-cli@${NPM_VERSION}" ||
     fail "npm 安装 xparse-cli@${NPM_VERSION} 失败。请执行恢复脚本。"
-fi
-if [ -n "${LOCAL_CLI_FILE}" ] || [ -z "${XPARSE_TEST_ASSET_DIR:-}" ]; then
   if [ ! -x "${CLI_PATH}" ]; then
     fail "CLI 安装失败：未找到 ${CLI_PATH}。请执行恢复脚本。"
   fi
-  "${CLI_PATH}" --profile workbuddy config set base_url "${PROFILE_BASE_URL}" ||
+  env -u NODE_OPTIONS "${CLI_PATH}" --profile workbuddy \
+    config set base_url "${PROFILE_BASE_URL}" ||
     fail "CLI 无法写入 ${ENVIRONMENT_LABEL} Profile。请执行恢复脚本。"
+  install_command_launcher
 fi
 
 printf '\n请完全退出并重新打开 WorkBuddy，然后在 TextIn xParse 中点击“连接”。\n'
 printf 'WorkBuddy 将安装唯一的 xparse-parse Skill、npm CLI %s，并打开 TextIn %s 环境授权页。\n' "${NPM_VERSION}" "${ENVIRONMENT_LABEL}"
+printf '新终端可直接运行 xparse-cli；如当前终端尚未生效，请重新打开终端。\n'
 printf '测试结束后请运行 restore-workbuddy-production.sh 恢复执行前状态。\n'

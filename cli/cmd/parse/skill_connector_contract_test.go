@@ -16,9 +16,17 @@ import (
 	"testing"
 )
 
-const expectedXParseLogoSHA256 = "2f5159dd77b1d4625d44ab5ac30a4b40417be1280083ae4c86ea674d485c4234"
+const (
+	expectedXParseLogoSHA256 = "2f5159dd77b1d4625d44ab5ac30a4b40417be1280083ae4c86ea674d485c4234"
+	expectedOCRDescription   = "Parse PDFs, images, Word, Excel, PowerPoint, scanned documents, and more into Markdown or structured JSON from the command line. Preserve document hierarchies and complex table structures for high-accuracy, high-performance OCR and document processing tasks. Parse up to 1,000 pages free each day."
+	expectedOCRDescriptionZH = "通过命令行将文件（PDF、图片、Word、Excel、PPT、扫描件等）解析为 Markdown 或结构化 JSON，可还原文档目录结构和复杂表格结构，适用于高精度高性能要求的文档处理OCR任务，每日免费1000页。"
+)
 
 type connectorCLIContract struct {
+	Runtime struct {
+		Type    string `json:"type"`
+		Version string `json:"version"`
+	} `json:"runtime"`
 	Init            map[string]string `json:"init"`
 	Auth            map[string]string `json:"auth"`
 	UnAuth          map[string]string `json:"unAuth"`
@@ -53,6 +61,9 @@ func TestWorkBuddyConnectorCommandAndExtractionContract(t *testing.T) {
 	if err := json.Unmarshal(data, &contract); err != nil {
 		t.Fatal(err)
 	}
+	if contract.Runtime.Type != "node" || contract.Runtime.Version != ">=18" {
+		t.Fatalf("production runtime = %#v", contract.Runtime)
+	}
 	for _, platform := range []string{"darwin", "linux", "win32"} {
 		if contract.Init[platform] == "" ||
 			contract.Auth[platform] == "" ||
@@ -66,11 +77,18 @@ func TestWorkBuddyConnectorCommandAndExtractionContract(t *testing.T) {
 			t.Fatalf("platform %q auth command is not native Device Flow: %q",
 				platform, contract.Auth[platform])
 		}
-		if !strings.Contains(contract.Init[platform], "/v2.2.0/") ||
+		if !strings.Contains(contract.Init[platform], "npm") ||
+			!strings.Contains(contract.Init[platform], "install --global") ||
+			!strings.Contains(contract.Init[platform], "xparse-cli@2.2.1-beta.2") ||
+			!strings.Contains(contract.Init[platform], "--registry=https://registry.npmmirror.com") ||
 			!strings.Contains(contract.Init[platform],
 				"--profile workbuddy config set base_url https://api.textin.com") {
-			t.Fatalf("platform %q production init is not pinned to 2.2.0: %q",
+			t.Fatalf("platform %q production init is not pinned to npm beta.1: %q",
 				platform, contract.Init[platform])
+		}
+		if strings.Contains(contract.Init[platform], "--prefix") ||
+			strings.Contains(contract.Init[platform], "dllf.intsig.net") {
+			t.Fatalf("platform %q production init does not use standard global npm: %q", platform, contract.Init[platform])
 		}
 		for _, command := range []string{
 			contract.Auth[platform],
@@ -89,8 +107,8 @@ func TestWorkBuddyConnectorCommandAndExtractionContract(t *testing.T) {
 		contract.Status["win32"],
 		contract.VersionCheck.Command["win32"],
 	} {
-		if !strings.Contains(command, `%USERPROFILE%\.xparse-cli\bin\xparse-cli.exe`) {
-			t.Fatalf("Windows command does not use the installer destination: %q", command)
+		if !strings.Contains(command, "xparse-cli.cmd") {
+			t.Fatalf("Windows command does not use the npm command shim: %q", command)
 		}
 	}
 	if contract.AuthURLDomain != "api.textin.com" {
@@ -139,8 +157,8 @@ func TestWorkBuddyConnectorCommandAndExtractionContract(t *testing.T) {
 	}
 
 	versionPattern := regexp.MustCompile(contract.VersionCheck.VersionPattern)
-	if !versionPattern.MatchString("xparse-cli version 2.2.0") ||
-		contract.VersionCheck.MinVersion != "2.2.0" {
+	if !versionPattern.MatchString("xparse-cli version 2.2.1") ||
+		contract.VersionCheck.MinVersion != "2.2.1" {
 		t.Fatalf("invalid version contract: %#v", contract.VersionCheck)
 	}
 	for _, legacy := range []string{"1.0.4", "2.0.3"} {
@@ -174,10 +192,15 @@ func TestWorkBuddyTestConnectorIsPinnedAndSandboxOnly(t *testing.T) {
 	if err := json.Unmarshal(data, &contract); err != nil {
 		t.Fatal(err)
 	}
+	if contract.Runtime.Type != "node" || contract.Runtime.Version != ">=18" {
+		t.Fatalf("test runtime = %#v", contract.Runtime)
+	}
 	for _, platform := range []string{"darwin", "linux", "win32"} {
 		initCommand := contract.Init[platform]
-		if !strings.Contains(initCommand, "npm install --global") ||
-			!strings.Contains(initCommand, "xparse-cli@2.2.1-beta.1") ||
+		if !strings.Contains(initCommand, "install --global") ||
+			!strings.Contains(initCommand, "xparse-cli@2.2.1-beta.2") ||
+			!strings.Contains(initCommand,
+				"--registry=https://registry.npmmirror.com") ||
 			!strings.Contains(initCommand, "textin-sandbox.intsig.com") ||
 			!strings.Contains(initCommand, "--profile workbuddy config set base_url") {
 			t.Fatalf("platform %q test init is not pinned to sandbox: %q",
@@ -186,6 +209,37 @@ func TestWorkBuddyTestConnectorIsPinnedAndSandboxOnly(t *testing.T) {
 		if strings.Contains(initCommand, "@beta") || strings.Contains(initCommand, "install.sh") || strings.Contains(initCommand, "install.ps1") {
 			t.Fatalf("platform %q test init does not use an exact npm beta: %q",
 				platform, initCommand)
+		}
+		if strings.Contains(initCommand, "--prefix") {
+			t.Fatalf("platform %q test init uses a custom npm prefix: %q", platform, initCommand)
+		}
+		if platform == "win32" {
+			if !strings.HasPrefix(initCommand, `set "NODE_OPTIONS=" &&`) {
+				t.Fatalf("Windows test init does not clear NODE_OPTIONS: %q", initCommand)
+			}
+			if !strings.Contains(initCommand, "npm.cmd install --global") ||
+				strings.Contains(initCommand, "powershell") {
+				t.Fatalf("Windows test init can resolve to an execution-policy-blocked npm.ps1: %q",
+					initCommand)
+			}
+		} else if strings.Count(initCommand, "env -u NODE_OPTIONS") != 2 {
+			t.Fatalf("platform %q test init does not isolate every Node process: %q",
+				platform, initCommand)
+		}
+		for _, command := range []string{
+			contract.Auth[platform],
+			contract.UnAuth[platform],
+			contract.Status[platform],
+			contract.VersionCheck.Command[platform],
+		} {
+			if platform == "win32" {
+				if !strings.Contains(command, `set "NODE_OPTIONS=" &&`) {
+					t.Fatalf("Windows lifecycle command does not clear NODE_OPTIONS: %q", command)
+				}
+			} else if !strings.HasPrefix(command, "env -u NODE_OPTIONS ") {
+				t.Fatalf("platform %q lifecycle command does not isolate NODE_OPTIONS: %q",
+					platform, command)
+			}
 		}
 	}
 	if contract.VersionCheck.MinVersion != "2.2.1" {
@@ -251,22 +305,267 @@ func TestWorkBuddyTestConnectorIsPinnedAndSandboxOnly(t *testing.T) {
 	}
 }
 
+func TestNodeOptionsIsolationAllowsNodeStartup(t *testing.T) {
+	nodePath, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("Node.js is not installed")
+	}
+	command := exec.Command("/usr/bin/env", "-u", "NODE_OPTIONS", nodePath,
+		"-e", `process.stdout.write("ok")`)
+	command.Env = append(os.Environ(), "NODE_OPTIONS=--use-system-ca")
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("sanitized Node startup failed: %v\n%s", err, output)
+	}
+	if string(output) != "ok" {
+		t.Fatalf("sanitized Node output = %q", output)
+	}
+}
+
+func TestBuildWorkBuddyLocalPackageUsesLocalAssetsAndNpmMirror(t *testing.T) {
+	outputDir := t.TempDir()
+	version := "v2.2.1-beta.2-local-test"
+	command := exec.Command(
+		"/bin/sh",
+		repositoryPath(t, "connector", "test", "build-workbuddy-local-package.sh"),
+		"--output-dir", outputDir,
+		"--version", version,
+	)
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("build local package: %v\n%s", err, stderr.String())
+	}
+	packagePath := strings.TrimSpace(string(output))
+	archive, err := zip.OpenReader(packagePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer archive.Close()
+
+	prefix := "workbuddy-xparse-connector-" + version + "/"
+	contents := make(map[string][]byte)
+	for _, file := range archive.File {
+		if strings.Contains(file.Name, "/bin/") {
+			t.Fatalf("Connector package unexpectedly bundles a CLI binary: %s", file.Name)
+		}
+		if file.FileInfo().IsDir() {
+			continue
+		}
+		reader, err := file.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, readErr := io.ReadAll(reader)
+		closeErr := reader.Close()
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if closeErr != nil {
+			t.Fatal(closeErr)
+		}
+		contents[file.Name] = data
+	}
+	for name, data := range contents {
+		if strings.HasSuffix(strings.ToLower(name), ".ps1") &&
+			!bytes.HasPrefix(data, []byte{0xef, 0xbb, 0xbf}) {
+			t.Fatalf("PowerShell script is not UTF-8 BOM encoded for Windows PowerShell 5.1: %s", name)
+		}
+	}
+
+	for _, relative := range []string{
+		"install.sh",
+		"install.ps1",
+		"restore.sh",
+		"restore.ps1",
+		"manifest.json",
+		"SHA256SUMS",
+		"scripts/enable-workbuddy-test.sh",
+		"scripts/enable-workbuddy-test.ps1",
+		"assets/workbuddy-cli.json",
+		"assets/workbuddy-connector-meta.json",
+		"assets/workbuddy-icon.png",
+		"assets/workbuddy-marketplace-entry.json",
+		"assets/workbuddy-xparse-parse.zip",
+	} {
+		if _, ok := contents[prefix+relative]; !ok {
+			t.Fatalf("Connector package is missing %s", relative)
+		}
+	}
+
+	installScript := string(contents[prefix+"install.sh"])
+	for _, expected := range []string{
+		"env -u NODE_OPTIONS node",
+		"env -u NODE_OPTIONS npm view",
+		"env -u NODE_OPTIONS",
+		"xparse-cli-darwin-arm64",
+		"xparse-cli-linux-amd64",
+		"WorkBuddy 状态未修改",
+		"XPARSE_TEST_ASSET_DIR=",
+		"XPARSE_NPM_VERSION=\"2.2.1-beta.2\"",
+		"XPARSE_NPM_REGISTRY=\"https://registry.npmmirror.com\"",
+	} {
+		if !strings.Contains(installScript, expected) {
+			t.Fatalf("package installer does not contain %q", expected)
+		}
+	}
+	if strings.Contains(installScript, "dllf.intsig.net") {
+		t.Fatal("package installer references DLLF")
+	}
+	if strings.Contains(installScript, "XPARSE_INSTALL_CLI_WITH_LOCAL_ASSETS=1") {
+		t.Fatal("local package installer still performs a custom-prefix CLI installation")
+	}
+	windowsInstallScript := string(contents[prefix+"install.ps1"])
+	for _, expected := range []string{
+		"Get-FileHash",
+		"npm.cmd view",
+		`$OriginalNodeOptions = $env:NODE_OPTIONS`,
+		"Remove-Item Env:NODE_OPTIONS",
+		`$env:NODE_OPTIONS = $OriginalNodeOptions`,
+		"finally",
+		"xparse-cli-windows-amd64",
+		"xparse-cli-windows-arm64",
+		"WorkBuddy 状态未修改",
+		`$env:XPARSE_TEST_ASSET_DIR`,
+		`$env:XPARSE_NPM_VERSION = "2.2.1-beta.2"`,
+		`$env:XPARSE_NPM_REGISTRY = "https://registry.npmmirror.com"`,
+		"scripts\\enable-workbuddy-test.ps1",
+	} {
+		if !strings.Contains(windowsInstallScript, expected) {
+			t.Fatalf("Windows package installer does not contain %q", expected)
+		}
+	}
+	if strings.Contains(windowsInstallScript, "dllf.intsig.net") {
+		t.Fatal("Windows package installer references DLLF")
+	}
+	if strings.Contains(windowsInstallScript, `$env:XPARSE_INSTALL_CLI_WITH_LOCAL_ASSETS = "1"`) {
+		t.Fatal("Windows local package installer still performs a custom-prefix CLI installation")
+	}
+	if strings.Contains(windowsInstallScript, "& npm view") ||
+		strings.Contains(windowsInstallScript, "Get-Command npm ") {
+		t.Fatal("Windows package installer can resolve npm.ps1")
+	}
+	packagedEnableScript := string(contents[prefix+"scripts/enable-workbuddy-test.sh"])
+	for _, expected := range []string{
+		"XPARSE_INSTALL_CLI_WITH_LOCAL_ASSETS",
+		"https://registry.npmmirror.com",
+		`"--registry=${NPM_REGISTRY}"`,
+		"install_command_launcher",
+		"workbuddy-command-path.added",
+		".local/bin",
+		`"${COMMAND_PATH}" version`,
+	} {
+		if !strings.Contains(packagedEnableScript, expected) {
+			t.Fatalf("packaged enable script does not contain %q", expected)
+		}
+	}
+	packagedWindowsEnableScript := string(contents[prefix+"scripts/enable-workbuddy-test.ps1"])
+	for _, expected := range []string{
+		"Get-Command npm.cmd",
+		"& npm.cmd install --global",
+		"Install-CommandLauncher",
+		`call "%USERPROFILE%\.xparse-cli\npm\xparse-cli.cmd" %*`,
+		"LegacyCLIBackup",
+		`SetEnvironmentVariable("Path"`,
+		"& $CommandPath version",
+	} {
+		if !strings.Contains(packagedWindowsEnableScript, expected) {
+			t.Fatalf("packaged Windows enable script does not contain %q", expected)
+		}
+	}
+	packagedRestoreScript := string(contents[prefix+"restore.sh"])
+	for _, expected := range []string{
+		"restore_command_launcher",
+		"COMMAND_BACKUP",
+		"PATH_MARKER",
+	} {
+		if !strings.Contains(packagedRestoreScript, expected) {
+			t.Fatalf("packaged restore script does not contain %q", expected)
+		}
+	}
+	packagedWindowsRestoreScript := string(contents[prefix+"restore.ps1"])
+	for _, expected := range []string{
+		"Restore-CommandLauncher",
+		"LegacyCLIBackup",
+		`SetEnvironmentVariable(`,
+	} {
+		if !strings.Contains(packagedWindowsRestoreScript, expected) {
+			t.Fatalf("packaged Windows restore script does not contain %q", expected)
+		}
+	}
+
+	connectorConfig := string(contents[prefix+"assets/workbuddy-cli.json"])
+	if !strings.Contains(connectorConfig, "xparse-cli@2.2.1-beta.2") ||
+		!strings.Contains(connectorConfig,
+			"--registry=https://registry.npmmirror.com") ||
+		!strings.Contains(connectorConfig, `"type": "node"`) ||
+		!strings.Contains(connectorConfig, `"version": ">=18"`) {
+		t.Fatal("packaged Connector does not pin beta.1 to npmmirror")
+	}
+	if strings.Contains(connectorConfig, "dllf.intsig.net") || strings.Contains(connectorConfig, "--prefix") {
+		t.Fatal("packaged Connector config does not use standard global npm")
+	}
+
+	assertMarketplaceDescriptions(t,
+		readRepositoryFile(t, "connector", "marketplace-entry.json"))
+	assertMarketplaceDescriptions(t,
+		contents[prefix+"assets/workbuddy-marketplace-entry.json"])
+
+	manifest := string(contents[prefix+"manifest.json"])
+	for _, expected := range []string{
+		`"npm_package": "xparse-cli@2.2.1-beta.2"`,
+		`"npm_registry": "https://registry.npmmirror.com"`,
+		`"connector_assets_are_local": true`,
+		`"dllf_required": false`,
+		`"command_line_launcher": false`,
+		`"supported_installers": ["macos", "linux", "windows"]`,
+	} {
+		if !strings.Contains(manifest, expected) {
+			t.Fatalf("package manifest does not contain %q", expected)
+		}
+	}
+}
+
+func assertMarketplaceDescriptions(t *testing.T, data []byte) {
+	t.Helper()
+	var entry struct {
+		Description   string `json:"description"`
+		DescriptionZH string `json:"description_zh"`
+		DescriptionEN string `json:"description_en"`
+	}
+	if err := json.Unmarshal(data, &entry); err != nil {
+		t.Fatal(err)
+	}
+	if entry.Description != expectedOCRDescription ||
+		entry.DescriptionEN != expectedOCRDescription ||
+		entry.DescriptionZH != expectedOCRDescriptionZH {
+		t.Fatalf("marketplace OCR descriptions do not match: %#v", entry)
+	}
+}
+
 func TestWorkBuddyPreConnectorIsPinnedToPreOnly(t *testing.T) {
 	data := readRepositoryFile(t, "connector", "cli.pre.json")
 	var contract connectorCLIContract
 	if err := json.Unmarshal(data, &contract); err != nil {
 		t.Fatal(err)
 	}
+	if contract.Runtime.Type != "node" || contract.Runtime.Version != ">=18" {
+		t.Fatalf("pre runtime = %#v", contract.Runtime)
+	}
 	for _, platform := range []string{"darwin", "linux", "win32"} {
 		initCommand := contract.Init[platform]
-		if !strings.Contains(initCommand, "/v2.2.0-workbuddy-pre.2/") ||
+		if !strings.Contains(initCommand, "xparse-cli@2.2.1-beta.2") ||
+			!strings.Contains(initCommand, "--registry=https://registry.npmmirror.com") ||
 			!strings.Contains(initCommand, "textin-api-pre.intsig.com") ||
 			!strings.Contains(initCommand, "--profile workbuddy config set base_url") {
 			t.Fatalf("platform %q pre init is not pinned to pre: %q",
 				platform, initCommand)
 		}
 		if strings.Contains(initCommand, "textin-sandbox.intsig.com") ||
-			strings.Contains(initCommand, "/latest/") {
+			strings.Contains(initCommand, "/latest/") ||
+			strings.Contains(initCommand, "--prefix") ||
+			strings.Contains(initCommand, "dllf.intsig.net") {
 			t.Fatalf("platform %q pre init references the wrong environment: %q",
 				platform, initCommand)
 		}
@@ -308,6 +607,12 @@ func TestWorkBuddyMacOSTestInjectionRestoresUninstalledBaseline(t *testing.T) {
 	productionCatalog := []byte(`{
   "tokenProviders": [],
   "connectors": [
+    {
+      "id": "textin-xparse",
+      "description": "old production description",
+      "description_zh": "旧的线上描述",
+      "description_en": "old production description"
+    },
     {
       "id": "existing",
       "name": "Existing Connector"
@@ -391,12 +696,16 @@ func TestWorkBuddyMacOSTestInjectionRestoresUninstalledBaseline(t *testing.T) {
 		t.Fatalf("test Connector unexpectedly includes xparse-doc-tools: %v", err)
 	}
 	assertCatalogConnectorCount(t, catalogPath, "textin-xparse", 1)
+	assertCatalogMarketplaceDescriptions(t, catalogPath)
 	assertFileContent(t, catalogPath+".textin-xparse.production.bak", productionCatalog)
 	assertFileContent(t, filepath.Join(profileDir+".production.bak", "config.yaml"),
 		productionProfile)
 	assertFileContent(t, filepath.Join(profileDir+".production.bak", "oauth-token.json"),
 		productionToken)
-	assertFileContent(t, filepath.Join(filepath.Dir(cliPath)+".production.bak", filepath.Base(cliPath)), productionCLI)
+	assertFileContent(t, cliPath, productionCLI)
+	if _, err := os.Stat(filepath.Dir(cliPath) + ".production.bak"); !os.IsNotExist(err) {
+		t.Fatalf("standard npm switch created a custom-prefix backup: %v", err)
+	}
 	assertFileContent(
 		t,
 		filepath.Join(activeSkillsDir+".production.bak", "legacy-skill", "SKILL.md"),
@@ -405,10 +714,6 @@ func TestWorkBuddyMacOSTestInjectionRestoresUninstalledBaseline(t *testing.T) {
 	if _, err := os.Stat(profileDir); !os.IsNotExist(err) {
 		t.Fatalf("test switch kept the production profile active: %v", err)
 	}
-	if _, err := os.Stat(cliPath); !os.IsNotExist(err) {
-		t.Fatalf("test switch kept the production CLI active: %v", err)
-	}
-
 	runWorkBuddyScript(
 		t,
 		"enable-workbuddy-test.sh",
@@ -421,8 +726,9 @@ func TestWorkBuddyMacOSTestInjectionRestoresUninstalledBaseline(t *testing.T) {
 	)
 	assertFileContent(t, filepath.Join(profileDir+".production.bak", "oauth-token.json"),
 		productionToken)
-	assertFileContent(t, filepath.Join(filepath.Dir(cliPath)+".production.bak", filepath.Base(cliPath)), productionCLI)
+	assertFileContent(t, cliPath, productionCLI)
 	assertCatalogConnectorCount(t, catalogPath, "textin-xparse", 1)
+	assertCatalogMarketplaceDescriptions(t, catalogPath)
 	assertFileContent(t, marketplaceIcon, testIcon)
 
 	if err := os.MkdirAll(profileDir, 0o700); err != nil {
@@ -437,10 +743,6 @@ func TestWorkBuddyMacOSTestInjectionRestoresUninstalledBaseline(t *testing.T) {
 		testToken,
 		0o600,
 	); err != nil {
-		t.Fatal(err)
-	}
-	testCLI := []byte("test-cli")
-	if err := os.WriteFile(cliPath, testCLI, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(activeSkillsDir, "xparse-parse"), 0o700); err != nil {
@@ -465,7 +767,7 @@ func TestWorkBuddyMacOSTestInjectionRestoresUninstalledBaseline(t *testing.T) {
 		activeSkillsDir,
 	)
 	assertFileContent(t, catalogPath, productionCatalog)
-	assertCatalogConnectorCount(t, catalogPath, "textin-xparse", 0)
+	assertCatalogConnectorCount(t, catalogPath, "textin-xparse", 1)
 	if _, err := os.Stat(connectorDir); !os.IsNotExist(err) {
 		t.Fatalf("restore kept an injected Connector active: %v", err)
 	}
@@ -479,10 +781,9 @@ func TestWorkBuddyMacOSTestInjectionRestoresUninstalledBaseline(t *testing.T) {
 	}
 	assertFileContent(t, filepath.Join(testProfileBackups[0], "oauth-token.json"), testToken)
 	testCLIBackups, err := filepath.Glob(filepath.Dir(cliPath) + ".test.*.bak")
-	if err != nil || len(testCLIBackups) != 1 {
-		t.Fatalf("test CLI backups = %v, err = %v", testCLIBackups, err)
+	if err != nil || len(testCLIBackups) != 0 {
+		t.Fatalf("standard npm switch unexpectedly archived a custom-prefix CLI: %v, err = %v", testCLIBackups, err)
 	}
-	assertFileContent(t, filepath.Join(testCLIBackups[0], filepath.Base(cliPath)), testCLI)
 	testConnectorBackups, err := filepath.Glob(filepath.Join(testBackupRoot, "connector.*"))
 	if err != nil || len(testConnectorBackups) != 1 {
 		t.Fatalf("test Connector backups = %v, err = %v", testConnectorBackups, err)
@@ -596,6 +897,8 @@ func TestWorkBuddyLegacyRefreshPreservesActivatedSkillForRestore(t *testing.T) {
 		"v2.2.0-workbuddy-test.3")
 	assertFileContent(t, marketplaceIcon+".production.bak", legacyMarketplaceIcon)
 	assertFileContent(t, marketplaceIcon, readRepositoryFile(t, "connector", "icon.png"))
+	assertCatalogConnectorCount(t, catalogPath, "textin-xparse", 1)
+	assertCatalogMarketplaceDescriptions(t, catalogPath)
 
 	runWorkBuddyScript(
 		t,
@@ -617,6 +920,126 @@ func TestWorkBuddyLegacyRefreshPreservesActivatedSkillForRestore(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(activeSkillsDir, "xparse-parse")); !os.IsNotExist(err) {
 		t.Fatalf("legacy refresh restore kept xparse-parse active: %v", err)
 	}
+}
+
+func TestWorkBuddyNpmLauncherMigratesLegacyCLIAndRestoresIt(t *testing.T) {
+	tempDir := t.TempDir()
+	homeDir := filepath.Join(tempDir, "home")
+	marketplaceRoot := filepath.Join(tempDir, "marketplace")
+	catalogDir := filepath.Join(marketplaceRoot, ".codebuddy-connector")
+	connectorsDir := filepath.Join(marketplaceRoot, "connectors")
+	assetDir := filepath.Join(tempDir, "assets")
+	profileDir := filepath.Join(tempDir, "profiles", "workbuddy")
+	npmPrefix := filepath.Join(tempDir, "npm")
+	cliPath := filepath.Join(npmPrefix, "bin", "xparse-cli")
+	commandDir := filepath.Join(homeDir, ".local", "bin")
+	commandPath := filepath.Join(commandDir, "xparse-cli")
+	pathMarker := filepath.Join(homeDir, ".xparse-cli", "workbuddy-command-path.added")
+	testBackupRoot := filepath.Join(tempDir, "test-backups")
+	activeSkillsDir := filepath.Join(tempDir, "activated-skills", "connector-textin-xparse")
+	fakeBin := filepath.Join(tempDir, "fake-bin")
+	for _, dir := range []string{
+		homeDir,
+		catalogDir,
+		connectorsDir,
+		assetDir,
+		commandDir,
+		fakeBin,
+	} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	catalogPath := filepath.Join(catalogDir, "connectors.json")
+	productionCatalog := []byte("{\"connectors\":[]}\n")
+	if err := os.WriteFile(catalogPath, productionCatalog, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeWorkBuddyTestAssets(t, assetDir)
+	legacyCLI := []byte("legacy-dllf-cli\n")
+	if err := os.WriteFile(commandPath, legacyCLI, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(fakeBin, "node"),
+		[]byte("#!/bin/sh\nprintf '24\\n'\n"),
+		0o700,
+	); err != nil {
+		t.Fatal(err)
+	}
+	fakeNPM := `#!/bin/sh
+prefix=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--prefix" ]; then
+    shift
+    prefix="$1"
+  fi
+  shift
+done
+mkdir -p "$(dirname "${XPARSE_CLI_PATH}")"
+printf '#!/bin/sh\nif [ "$1" = version ]; then printf "xparse-cli version 2.2.1-beta.2\\n"; fi\n' > "${XPARSE_CLI_PATH}"
+chmod 0755 "${XPARSE_CLI_PATH}"
+`
+	if err := os.WriteFile(filepath.Join(fakeBin, "npm"), []byte(fakeNPM), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	extraEnv := []string{
+		"HOME=" + homeDir,
+		"SHELL=/bin/sh",
+		"PATH=" + fakeBin + ":/usr/bin:/bin",
+		"XPARSE_INSTALL_CLI_WITH_LOCAL_ASSETS=1",
+		"XPARSE_COMMAND_DIR=" + commandDir,
+		"XPARSE_PATH_MARKER=" + pathMarker,
+	}
+	runWorkBuddyScriptWithExtraEnv(
+		t,
+		"enable-workbuddy-test.sh",
+		marketplaceRoot,
+		profileDir,
+		cliPath,
+		assetDir,
+		testBackupRoot,
+		activeSkillsDir,
+		extraEnv,
+	)
+	assertFileContent(t, commandPath+".production.bak", legacyCLI)
+	if target, err := os.Readlink(commandPath); err != nil || target != cliPath {
+		t.Fatalf("command launcher target = %q, err = %v", target, err)
+	}
+	assertFileContains(t, filepath.Join(homeDir, ".profile"), commandDir)
+	assertFileContains(t, pathMarker, filepath.Join(homeDir, ".profile"))
+	output, err := exec.Command(commandPath, "version").CombinedOutput()
+	if err != nil || !bytes.Contains(output, []byte("2.2.1-beta.2")) {
+		t.Fatalf("command launcher failed: %v\n%s", err, output)
+	}
+
+	runWorkBuddyScriptWithExtraEnv(
+		t,
+		"restore-workbuddy-production.sh",
+		marketplaceRoot,
+		profileDir,
+		cliPath,
+		assetDir,
+		testBackupRoot,
+		activeSkillsDir,
+		extraEnv,
+	)
+	assertFileContent(t, commandPath, legacyCLI)
+	if _, err := os.Stat(commandPath + ".production.bak"); !os.IsNotExist(err) {
+		t.Fatalf("legacy command backup remains: %v", err)
+	}
+	if _, err := os.Stat(pathMarker); !os.IsNotExist(err) {
+		t.Fatalf("PATH marker remains: %v", err)
+	}
+	profileData, err := os.ReadFile(filepath.Join(homeDir, ".profile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(profileData, []byte("xparse-cli WorkBuddy npm launcher")) {
+		t.Fatalf("restored shell profile still contains launcher PATH: %s", profileData)
+	}
+	assertFileContent(t, catalogPath, productionCatalog)
 }
 
 func TestWorkBuddyRestoreRecoversOrphanedFixedBackups(t *testing.T) {
@@ -736,7 +1159,10 @@ func TestWorkBuddyRestoreRecoversOrphanedFixedBackups(t *testing.T) {
 		"v2.2.0-workbuddy-test.3",
 	)
 	assertFileContent(t, filepath.Join(profileDir+".production.bak", "config.yaml"), productionConfig)
-	assertFileContent(t, filepath.Join(filepath.Dir(cliPath)+".production.bak", filepath.Base(cliPath)), productionCLI)
+	assertFileContent(t, cliPath, productionCLI)
+	if _, err := os.Stat(filepath.Dir(cliPath) + ".production.bak"); !os.IsNotExist(err) {
+		t.Fatalf("standard npm re-enable recreated a custom-prefix backup: %v", err)
+	}
 }
 
 func TestWorkBuddyWindowsSwitchScriptsMatchMacOSSafetyContract(t *testing.T) {
@@ -786,8 +1212,14 @@ func TestWorkBuddyWindowsSwitchScriptsMatchMacOSSafetyContract(t *testing.T) {
 		"Expand-Archive",
 		"Get-FileHash",
 		"ExpectedIconSHA256",
-		"npm install --global",
-		"2.2.1-beta.1",
+		"npm.cmd install --global",
+		"Install-CommandLauncher",
+		"LegacyCLIBackup",
+		`call "%USERPROFILE%\.xparse-cli\npm\xparse-cli.cmd" %*`,
+		`SetEnvironmentVariable("Path"`,
+		"2.2.1-beta.2",
+		"https://registry.npmmirror.com",
+		"XPARSE_INSTALL_CLI_WITH_LOCAL_ASSETS",
 		"XPARSE_EXPECTED_AUTH_DOMAIN",
 		"XPARSE_PROFILE_BASE_URL",
 		"config set base_url $ProfileBaseURL",
@@ -812,6 +1244,9 @@ func TestWorkBuddyWindowsSwitchScriptsMatchMacOSSafetyContract(t *testing.T) {
 		"orphan-recovery.",
 		"开始自动恢复孤立正式备份",
 		"现在可以重新运行 enable 一键安装命令",
+		"Restore-CommandLauncher",
+		"LegacyCLIBackup",
+		`SetEnvironmentVariable(`,
 	} {
 		if !strings.Contains(restoreScript, expected) {
 			t.Fatalf("Windows restore script does not contain %q", expected)
@@ -828,6 +1263,26 @@ func runWorkBuddyScript(
 	activeSkillsDir string,
 ) {
 	t.Helper()
+	runWorkBuddyScriptWithExtraEnv(
+		t,
+		name,
+		marketplaceRoot,
+		profileDir,
+		cliPath,
+		assetDir,
+		testBackupRoot,
+		activeSkillsDir,
+		nil,
+	)
+}
+
+func runWorkBuddyScriptWithExtraEnv(
+	t *testing.T,
+	name, marketplaceRoot, profileDir, cliPath, assetDir, testBackupRoot,
+	activeSkillsDir string,
+	extraEnv []string,
+) {
+	t.Helper()
 	command := exec.Command(
 		"/bin/sh",
 		repositoryPath(t, "connector", "test", name),
@@ -842,9 +1297,26 @@ func runWorkBuddyScript(
 		"WORKBUDDY_TEST_BACKUP_ROOT="+testBackupRoot,
 		"WORKBUDDY_CONNECTOR_SKILLS_DIR="+activeSkillsDir,
 	)
+	command.Env = overlayEnvironment(command.Env, extraEnv)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("%s failed: %v\n%s", name, err, output)
 	}
+}
+
+func overlayEnvironment(base, overrides []string) []string {
+	overrideKeys := make(map[string]struct{}, len(overrides))
+	for _, entry := range overrides {
+		key, _, _ := strings.Cut(entry, "=")
+		overrideKeys[key] = struct{}{}
+	}
+	merged := make([]string, 0, len(base)+len(overrides))
+	for _, entry := range base {
+		key, _, _ := strings.Cut(entry, "=")
+		if _, overridden := overrideKeys[key]; !overridden {
+			merged = append(merged, entry)
+		}
+	}
+	return append(merged, overrides...)
 }
 
 func writeXParseSkillArchive(t *testing.T, destination string) {
@@ -932,6 +1404,33 @@ func assertCatalogConnectorCount(t *testing.T, path, connectorID string, want in
 	if got != want {
 		t.Fatalf("%s connector %q count = %d, want %d", path, connectorID, got, want)
 	}
+}
+
+func assertCatalogMarketplaceDescriptions(t *testing.T, path string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var catalog struct {
+		Connectors []json.RawMessage `json:"connectors"`
+	}
+	if err := json.Unmarshal(data, &catalog); err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+	for _, connector := range catalog.Connectors {
+		var identity struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(connector, &identity); err != nil {
+			t.Fatal(err)
+		}
+		if identity.ID == "textin-xparse" {
+			assertMarketplaceDescriptions(t, connector)
+			return
+		}
+	}
+	t.Fatalf("%s does not contain textin-xparse", path)
 }
 
 func assertFileContains(t *testing.T, path, expected string) {
@@ -1033,8 +1532,9 @@ func TestSkillUsesFormalCLIWithoutCredentialCollection(t *testing.T) {
 	if len(frontmatter) != 3 || !strings.Contains(frontmatter[1], purchaseURL) {
 		t.Fatalf("Skill description does not include the paid purchase URL %s", purchaseURL)
 	}
-	if !strings.Contains(skill, "xparse-cli --profile workbuddy <command>") {
-		t.Fatal("WorkBuddy Skill does not select the isolated WorkBuddy profile")
+	if !strings.Contains(skill, "xparse-cli --profile workbuddy <command>") ||
+		!strings.Contains(skill, "standard global npm prefix") {
+		t.Fatal("WorkBuddy Skill does not use the isolated profile and standard npm runtime")
 	}
 	if !strings.Contains(skill, "Use `--api auto` by default") ||
 		!strings.Contains(skill, "Authentication is identity, not permission to spend") ||
@@ -1079,7 +1579,8 @@ func TestSkillUsesFormalCLIWithoutCredentialCollection(t *testing.T) {
 	keySetup := string(readRepositoryFile(
 		t, "skills", "xparse-parse", "references", "textin-key-setup.md",
 	))
-	if !strings.Contains(cliGuidance, "authenticated user's reported free-package allowance") ||
+	if !strings.Contains(cliGuidance, "AppKey-authenticated request") ||
+		!strings.Contains(cliGuidance, "free_remain_count") ||
 		!strings.Contains(authentication, "uses the daily free allowance first") ||
 		!strings.Contains(authentication, "not approval to run `--api paid`") {
 		t.Fatal("Skill references do not explain automatic free-package routing and paid approval")

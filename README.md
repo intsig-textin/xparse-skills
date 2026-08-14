@@ -40,7 +40,7 @@ xparse-cli parse report.pdf --api auto --output ./result/    # Save to directory
 **Install:**
 
 ```bash
-npm install --global xparse-cli@2.2.1-beta.1
+npm install --global --registry=https://registry.npmmirror.com xparse-cli@2.2.1-beta.2
 ```
 
 **Key commands:**
@@ -60,7 +60,7 @@ npm install --global xparse-cli@2.2.1-beta.1
 
 | Mode | Behavior |
 |------|----------|
-| `--api auto` | Default; uses current daily free quota, then an authenticated user's reported free-package quota |
+| `--api auto` | Default; uses current daily free quota, then an AppKey-authenticated `free_package.free_remain_count` when the service reports it |
 | `--api free` | Force the free endpoint only |
 | `--api paid` | Explicit paid route; requires user approval and valid OAuth/AppKey credentials |
 

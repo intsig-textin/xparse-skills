@@ -14,6 +14,11 @@ PROFILE_DIR="${XPARSE_WORKBUDDY_PROFILE_DIR:-${HOME}/.xparse-cli/profiles/workbu
 PROFILE_BACKUP="${PROFILE_DIR}.production.bak"
 NPM_PREFIX="${XPARSE_NPM_PREFIX:-${HOME}/.xparse-cli/npm}"
 NPM_BACKUP="${NPM_PREFIX}.production.bak"
+COMMAND_DIR="${XPARSE_COMMAND_DIR:-${HOME}/.local/bin}"
+COMMAND_PATH="${COMMAND_DIR}/xparse-cli"
+COMMAND_BACKUP="${COMMAND_PATH}.production.bak"
+COMMAND_MARKER="${COMMAND_PATH}.workbuddy-npm"
+PATH_MARKER="${XPARSE_PATH_MARKER:-${HOME}/.xparse-cli/workbuddy-command-path.added}"
 ACTIVE_SKILLS_DIR="${WORKBUDDY_CONNECTOR_SKILLS_DIR:-${HOME}/.workbuddy/connectors/skills/connector-textin-xparse}"
 ACTIVE_SKILLS_BACKUP="${ACTIVE_SKILLS_DIR}.production.bak"
 TIMESTAMP="$(date +%Y%m%d%H%M%S)"
@@ -46,6 +51,32 @@ restore_orphaned_backup() {
   printf '已恢复孤立正式备份：%s\n' "${current_path}"
 }
 
+restore_command_launcher() {
+  if [ -f "${COMMAND_MARKER}" ]; then
+    rm -f "${COMMAND_PATH}" "${COMMAND_MARKER}"
+  fi
+  if [ -e "${COMMAND_BACKUP}" ] || [ -L "${COMMAND_BACKUP}" ]; then
+    mkdir -p "${COMMAND_DIR}"
+    if [ -e "${COMMAND_PATH}" ] || [ -L "${COMMAND_PATH}" ]; then
+      rm -f "${COMMAND_PATH}"
+    fi
+    mv "${COMMAND_BACKUP}" "${COMMAND_PATH}"
+  fi
+  if [ -f "${PATH_MARKER}" ]; then
+    shell_profile="$(sed -n '1p' "${PATH_MARKER}")"
+    path_line="$(sed -n '2p' "${PATH_MARKER}")"
+    if [ -n "${shell_profile}" ] && [ -f "${shell_profile}" ]; then
+      profile_temp="${shell_profile}.xparse-path-restore.$$"
+      cp -p "${shell_profile}" "${profile_temp}"
+      awk -v comment='# Added by xparse-cli WorkBuddy npm launcher' \
+        -v line="${path_line}" '$0 != comment && $0 != line' \
+        "${shell_profile}" > "${profile_temp}"
+      mv "${profile_temp}" "${shell_profile}"
+    fi
+    rm -f "${PATH_MARKER}"
+  fi
+}
+
 if [ ! -f "${CONNECTOR_DIR}/.workbuddy-test" ]; then
   ORPHANED_BACKUPS=""
   for backup in \
@@ -54,6 +85,9 @@ if [ ! -f "${CONNECTOR_DIR}/.workbuddy-test" ]; then
     "${MARKETPLACE_ICON_BACKUP}" \
     "${PROFILE_BACKUP}" \
     "${NPM_BACKUP}" \
+    "${COMMAND_BACKUP}" \
+    "${COMMAND_MARKER}" \
+    "${PATH_MARKER}" \
     "${ACTIVE_SKILLS_BACKUP}"; do
     if [ -e "${backup}" ]; then
       ORPHANED_BACKUPS="${ORPHANED_BACKUPS}
@@ -77,6 +111,7 @@ if [ ! -f "${CONNECTOR_DIR}/.workbuddy-test" ]; then
       "${PROFILE_DIR}" "${PROFILE_BACKUP}" "profile.current"
     restore_orphaned_backup \
       "${NPM_PREFIX}" "${NPM_BACKUP}" "npm-cli.current"
+    restore_command_launcher
     restore_orphaned_backup \
       "${ACTIVE_SKILLS_DIR}" "${ACTIVE_SKILLS_BACKUP}" "activated-skills.current"
     printf '已自动恢复孤立备份，原当前状态已归档到：%s\n' \
@@ -124,12 +159,13 @@ fi
 if [ -d "${PROFILE_BACKUP}" ]; then
   mv "${PROFILE_BACKUP}" "${PROFILE_DIR}"
 fi
-if [ -d "${NPM_PREFIX}" ]; then
-  mv "${NPM_PREFIX}" "${NPM_TEST_BACKUP}"
-fi
 if [ -d "${NPM_BACKUP}" ]; then
+  if [ -d "${NPM_PREFIX}" ]; then
+    mv "${NPM_PREFIX}" "${NPM_TEST_BACKUP}"
+  fi
   mv "${NPM_BACKUP}" "${NPM_PREFIX}"
 fi
+restore_command_launcher
 if [ -d "${ACTIVE_SKILLS_DIR}" ]; then
   mv "${ACTIVE_SKILLS_DIR}" "${ACTIVE_SKILLS_TEST_BACKUP}"
 fi

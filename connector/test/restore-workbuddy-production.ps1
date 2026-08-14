@@ -42,6 +42,21 @@ $NpmPrefix = if ($env:XPARSE_NPM_PREFIX) {
     Join-Path $UserHome ".xparse-cli\npm"
 }
 $NpmBackup = "${NpmPrefix}.production.bak"
+$CommandDir = if ($env:XPARSE_COMMAND_DIR) {
+    $env:XPARSE_COMMAND_DIR
+} else {
+    Join-Path $UserHome ".xparse-cli\bin"
+}
+$CommandPath = Join-Path $CommandDir "xparse-cli.cmd"
+$CommandBackup = "${CommandPath}.production.bak"
+$CommandMarker = "${CommandPath}.workbuddy-npm"
+$LegacyCLIPath = Join-Path $CommandDir "xparse-cli.exe"
+$LegacyCLIBackup = "${LegacyCLIPath}.production.bak"
+$PathMarker = if ($env:XPARSE_PATH_MARKER) {
+    $env:XPARSE_PATH_MARKER
+} else {
+    Join-Path $UserHome ".xparse-cli\workbuddy-command-path.added"
+}
 $ActiveSkillsDir = if ($env:WORKBUDDY_CONNECTOR_SKILLS_DIR) {
     $env:WORKBUDDY_CONNECTOR_SKILLS_DIR
 } else {
@@ -90,6 +105,40 @@ function Restore-OrphanedBackup {
     Write-Host "已恢复孤立正式备份：${CurrentPath}"
 }
 
+function Restore-CommandLauncher {
+    if (Test-Path -LiteralPath $CommandMarker -PathType Leaf) {
+        if (Test-Path -LiteralPath $CommandPath -PathType Leaf) {
+            Remove-Item -LiteralPath $CommandPath -Force
+        }
+        Remove-Item -LiteralPath $CommandMarker -Force
+    }
+    if (Test-Path -LiteralPath $CommandBackup -PathType Leaf) {
+        if (-not (Test-Path -LiteralPath $CommandDir -PathType Container)) {
+            New-Item -ItemType Directory -Path $CommandDir -Force | Out-Null
+        }
+        Move-Item -LiteralPath $CommandBackup -Destination $CommandPath -Force
+    }
+    if (Test-Path -LiteralPath $LegacyCLIBackup -PathType Leaf) {
+        if (-not (Test-Path -LiteralPath $CommandDir -PathType Container)) {
+            New-Item -ItemType Directory -Path $CommandDir -Force | Out-Null
+        }
+        Move-Item -LiteralPath $LegacyCLIBackup -Destination $LegacyCLIPath -Force
+    }
+    if (Test-Path -LiteralPath $PathMarker -PathType Leaf) {
+        $AddedPath = [System.IO.File]::ReadAllText($PathMarker).Trim()
+        $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+        $RestoredEntries = @($UserPath -split ';' | Where-Object {
+            $_ -and $_.TrimEnd('\') -ine $AddedPath.TrimEnd('\')
+        })
+        [Environment]::SetEnvironmentVariable(
+            "Path",
+            ($RestoredEntries -join ';'),
+            "User"
+        )
+        Remove-Item -LiteralPath $PathMarker -Force
+    }
+}
+
 if (-not (Test-Path -LiteralPath $MarkerFile -PathType Leaf)) {
     $OrphanedBackups = @(
         $CatalogBackup,
@@ -97,6 +146,10 @@ if (-not (Test-Path -LiteralPath $MarkerFile -PathType Leaf)) {
         $MarketplaceIconBackup,
         $ProfileBackup,
         $NpmBackup,
+        $CommandBackup,
+        $LegacyCLIBackup,
+        $CommandMarker,
+        $PathMarker,
         $ActiveSkillsBackup
     ) | Where-Object { Test-Path -LiteralPath $_ }
     if ($OrphanedBackups.Count -gt 0) {
@@ -113,6 +166,7 @@ if (-not (Test-Path -LiteralPath $MarkerFile -PathType Leaf)) {
             "marketplace-icon.current.png"
         Restore-OrphanedBackup $ProfileDir $ProfileBackup "profile.current"
         Restore-OrphanedBackup $NpmPrefix $NpmBackup "npm-cli.current"
+        Restore-CommandLauncher
         Restore-OrphanedBackup $ActiveSkillsDir $ActiveSkillsBackup `
             "activated-skills.current"
         if (Test-Path -LiteralPath $CatalogFile -PathType Leaf) {
@@ -168,12 +222,13 @@ if (Test-Path -LiteralPath $ProfileDir -PathType Container) {
 if (Test-Path -LiteralPath $ProfileBackup -PathType Container) {
     Move-Item -LiteralPath $ProfileBackup -Destination $ProfileDir
 }
-if (Test-Path -LiteralPath $NpmPrefix -PathType Container) {
-    Move-Item -LiteralPath $NpmPrefix -Destination $NpmTestBackup
-}
 if (Test-Path -LiteralPath $NpmBackup -PathType Container) {
+    if (Test-Path -LiteralPath $NpmPrefix -PathType Container) {
+        Move-Item -LiteralPath $NpmPrefix -Destination $NpmTestBackup
+    }
     Move-Item -LiteralPath $NpmBackup -Destination $NpmPrefix
 }
+Restore-CommandLauncher
 if (Test-Path -LiteralPath $ActiveSkillsDir -PathType Container) {
     Move-Item -LiteralPath $ActiveSkillsDir -Destination $ActiveSkillsTestBackup
 }

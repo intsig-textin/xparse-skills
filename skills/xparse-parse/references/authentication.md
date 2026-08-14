@@ -124,8 +124,10 @@ consent; use the next browser login with `--prompt=consent` when a fresh
 confirmation is required.
 
 Omitting `--api` is equivalent to `--api auto`. Automatic mode queries current
-quota, uses the daily free allowance first, and can use a logged-in user's
-reported free-package allowance. `--api free` forces the free endpoint only.
+quota and uses the daily free allowance first. It can use a reported
+free-package allowance only when the quota request is AppKey-authenticated and
+returns `free_package.free_remain_count`; Device OAuth status alone is not
+package evidence. `--api free` forces the free endpoint only.
 A successful login identifies the user and records the preferred authentication
 method, but it is not approval to run `--api paid`. In paid mode, old
 configuration files remain AppKey-first when both AppKey and OAuth exist, and

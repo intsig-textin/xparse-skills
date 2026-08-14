@@ -7,15 +7,15 @@
 本流程用于 WorkBuddy Connector 的开发和发布前验证，覆盖：
 
 - marketplace 中能够发现 TextIn xParse Connector；
-- Connector 自动安装指定的 test 版 CLI 和唯一的 `xparse-parse` Skill；
+- Connector 通过 WorkBuddy Node runtime 标准全局安装指定的 test 版 CLI，并加载唯一的 `xparse-parse` Skill；
 - Device OAuth 能够完成连接、状态检查和退出；
 - WorkBuddy 使用隔离的 `workbuddy` Profile；
 - 免费解析默认生效，付费解析只在显式选择后生效；
 - 解析请求携带 `X-From: workbuddy`；
-- 测试结束后能够恢复测试前的 Connector、CLI、Profile、Skill 和 marketplace 状态。
+- 测试结束后能够恢复测试前的 Connector、Profile、Skill 和 marketplace 状态。
 
 > [!WARNING]
-> 启用脚本会临时替换本机已安装的 TextIn xParse Connector、CLI、`workbuddy` Profile、已激活 Skill 和 marketplace 注册项。不要在未准备恢复脚本时执行启用操作，也不要使用 `latest` 作为测试版本。
+> 启用脚本会临时替换本机已安装的 TextIn xParse Connector、`workbuddy` Profile、已激活 Skill 和 marketplace 注册项。WorkBuddy 随后执行标准 `npm install -g`，可能覆盖用户手动全局安装的 `xparse-cli` 版本；恢复脚本不会回滚这个共享的 npm 全局版本。不要使用 `latest` 作为测试版本。
 
 ## 文件说明
 
@@ -26,7 +26,7 @@
 | `enable-workbuddy-test.ps1` | Windows | 备份正式状态并注入测试 Connector |
 | `restore-workbuddy-production.ps1` | Windows | 恢复正式状态并归档测试版本 |
 
-脚本默认从 `v2.2.0-workbuddy-test.3` 不可变目录下载 Connector 资源，并通过 npm 安装固定的 `xparse-cli@2.2.1-beta.1`：
+脚本默认从不可变目录下载 Connector 资源。Connector 声明 Node.js `>=18` runtime，并由 WorkBuddy 使用标准全局 npm 路径安装固定的 `xparse-cli@2.2.1-beta.2`；不使用自定义 `--prefix`，也不创建 PATH launcher：
 
 ```text
 https://dllf.intsig.net/download/2026/Solution/xparse-cli/<version>/
@@ -177,16 +177,15 @@ $env:XPARSE_TEST_ASSET_DIR = "C:\path\to\workbuddy-test-assets"
 必要时可在终端只读检查 WorkBuddy Profile：
 
 ```bash
-"$HOME/.xparse-cli/npm/bin/xparse-cli" --profile workbuddy auth status --output=json
-"$HOME/.xparse-cli/npm/bin/xparse-cli" version
+xparse-cli --profile workbuddy auth status --output=json
+xparse-cli version
 ```
 
 Windows：
 
 ```powershell
-& "$env:USERPROFILE\.xparse-cli\npm\xparse-cli.cmd" `
-  --profile workbuddy auth status --output=json
-& "$env:USERPROFILE\.xparse-cli\npm\xparse-cli.cmd" version
+xparse-cli.cmd --profile workbuddy auth status --output=json
+xparse-cli.cmd version
 ```
 
 不要打印、复制或记录 OAuth access token、refresh token 或 AppKey。
@@ -197,7 +196,7 @@ Windows：
 2. 在获得用户明确同意后执行付费 OAuth 解析，确认 `--api paid --auth-method oauth` 可用。
 3. 确认 WorkBuddy 中的命令都显式使用 `--profile workbuddy`。
 4. 通过服务端日志或统计记录确认解析请求的 `X-From` 为 `workbuddy`。OAuth `/oauth21/token` 轮询本身不携带该请求头。
-5. 确认 `auto` 能识别每日免费额度和登录用户免费套餐；两者不足时必须停止，不能未经同意改成显式 `--api paid`。
+5. 确认 `auto` 能识别每日免费额度。当前 test 后端只会对 AppKey 认证的 quota 请求返回 `free_package`；WorkBuddy Device OAuth 不得被误判为已有免费套餐。所有已报告免费来源不足时必须停止，不能未经同意改成显式 `--api paid`。
 
 ## 6. 恢复测试前状态
 
@@ -273,7 +272,7 @@ Windows 回滚脚本使用相同的归档后恢复策略。
 | 变量 | 用途 |
 |------|------|
 | `XPARSER_VERSION` | 不可变测试版本号 |
-| `XPARSE_NPM_VERSION` | 固定安装的 npm beta 版本，默认 `2.2.1-beta.1` |
+| `XPARSE_NPM_VERSION` | 固定安装的 npm beta 版本，默认 `2.2.1-beta.2` |
 | `XPARSER_DOWNLOAD_BASE` | 测试资源下载根地址 |
 | `XPARSE_TEST_ASSET_DIR` | 本地测试资源目录 |
 | `WORKBUDDY_MARKETPLACE_ROOT` | WorkBuddy marketplace 根目录 |
@@ -283,7 +282,7 @@ Windows 回滚脚本使用相同的归档后恢复策略。
 | `WORKBUDDY_MARKETPLACE_ICONS_DIR` | marketplace 图标目录 |
 | `WORKBUDDY_CONNECTOR_SKILLS_DIR` | WorkBuddy 已激活 Skill 目录 |
 | `XPARSE_WORKBUDDY_PROFILE_DIR` | WorkBuddy CLI Profile 目录 |
-| `XPARSE_CLI_PATH` | CLI 可执行文件路径 |
+| `XPARSE_CLI_PATH` | 旧自定义-prefix测试兼容路径；标准全局 npm 模式不使用 |
 | `WORKBUDDY_TEST_BACKUP_ROOT` | 恢复时的测试归档目录 |
 
 在自定义路径测试时，启用和恢复必须使用完全相同的一组环境变量。

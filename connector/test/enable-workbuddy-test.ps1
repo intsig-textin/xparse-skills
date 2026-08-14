@@ -1,7 +1,13 @@
 $ErrorActionPreference = "Stop"
 
 $Version = if ($env:XPARSER_VERSION) { $env:XPARSER_VERSION } else { "v2.2.0-workbuddy-test.3" }
-$NpmVersion = if ($env:XPARSE_NPM_VERSION) { $env:XPARSE_NPM_VERSION } else { "2.2.1-beta.1" }
+$NpmVersion = if ($env:XPARSE_NPM_VERSION) { $env:XPARSE_NPM_VERSION } else { "2.2.1-beta.2" }
+$NpmRegistry = if ($env:XPARSE_NPM_REGISTRY) {
+    $env:XPARSE_NPM_REGISTRY
+} else {
+    "https://registry.npmmirror.com"
+}
+$InstallCLIWithLocalAssets = $env:XPARSE_INSTALL_CLI_WITH_LOCAL_ASSETS -eq "1"
 $ExpectedAuthDomain = if ($env:XPARSE_EXPECTED_AUTH_DOMAIN) {
     $env:XPARSE_EXPECTED_AUTH_DOMAIN
 } else {
@@ -69,6 +75,21 @@ $CLIPath = if ($env:XPARSE_CLI_PATH) {
 } else {
     Join-Path $NpmPrefix "xparse-cli.cmd"
 }
+$CommandDir = if ($env:XPARSE_COMMAND_DIR) {
+    $env:XPARSE_COMMAND_DIR
+} else {
+    Join-Path $UserHome ".xparse-cli\bin"
+}
+$CommandPath = Join-Path $CommandDir "xparse-cli.cmd"
+$CommandBackup = "${CommandPath}.production.bak"
+$CommandMarker = "${CommandPath}.workbuddy-npm"
+$LegacyCLIPath = Join-Path $CommandDir "xparse-cli.exe"
+$LegacyCLIBackup = "${LegacyCLIPath}.production.bak"
+$PathMarker = if ($env:XPARSE_PATH_MARKER) {
+    $env:XPARSE_PATH_MARKER
+} else {
+    Join-Path $UserHome ".xparse-cli\workbuddy-command-path.added"
+}
 $ActiveSkillsDir = if ($env:WORKBUDDY_CONNECTOR_SKILLS_DIR) {
     $env:WORKBUDDY_CONNECTOR_SKILLS_DIR
 } else {
@@ -81,6 +102,7 @@ $EntryDownload = "${CatalogFile}.textin-xparse-entry.download.${PID}"
 $MarkerFile = Join-Path $ConnectorDir ".workbuddy-test"
 $UTF8NoBOM = New-Object System.Text.UTF8Encoding($false)
 $UTF8Strict = New-Object System.Text.UTF8Encoding($false, $true)
+$ASCII = [System.Text.Encoding]::ASCII
 $ExpectedIconSHA256 = "2f5159dd77b1d4625d44ab5ac30a4b40417be1280083ae4c86ea674d485c4234"
 
 function Read-Utf8Text {
@@ -91,6 +113,69 @@ function Read-Utf8Text {
 function Read-Utf8Json {
     param([string]$Path)
     return (Read-Utf8Text $Path | ConvertFrom-Json)
+}
+
+function Install-CommandLauncher {
+    if (-not (Test-Path -LiteralPath $CommandDir -PathType Container)) {
+        New-Item -ItemType Directory -Path $CommandDir -Force | Out-Null
+    }
+    if (-not (Test-Path -LiteralPath $CommandMarker -PathType Leaf)) {
+        foreach ($Backup in @($CommandBackup, $LegacyCLIBackup)) {
+            if (Test-Path -LiteralPath $Backup) {
+                throw "检测到未恢复的命令行入口备份：${Backup}。请先运行恢复脚本。"
+            }
+        }
+        if (Test-Path -LiteralPath $CommandPath -PathType Leaf) {
+            Move-Item -LiteralPath $CommandPath -Destination $CommandBackup
+        }
+        if (Test-Path -LiteralPath $LegacyCLIPath -PathType Leaf) {
+            Move-Item -LiteralPath $LegacyCLIPath -Destination $LegacyCLIBackup
+        }
+    } elseif (Test-Path -LiteralPath $CommandPath -PathType Leaf) {
+        Remove-Item -LiteralPath $CommandPath -Force
+    }
+
+    $Launcher = @'
+@echo off
+call "%USERPROFILE%\.xparse-cli\npm\xparse-cli.cmd" %*
+exit /b %ERRORLEVEL%
+'@
+    [System.IO.File]::WriteAllText($CommandPath, $Launcher, $ASCII)
+    [System.IO.File]::WriteAllText(
+        $CommandMarker,
+        "npm:${NpmVersion}`n",
+        $UTF8NoBOM
+    )
+
+    $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $PathEntries = @($UserPath -split ';' | Where-Object { $_ })
+    $HasCommandDir = @(
+        $PathEntries | Where-Object {
+            $_.TrimEnd('\') -ieq $CommandDir.TrimEnd('\')
+        }
+    ).Count -gt 0
+    if (-not $HasCommandDir) {
+        $NewUserPath = if ([string]::IsNullOrWhiteSpace($UserPath)) {
+            $CommandDir
+        } else {
+            "${CommandDir};${UserPath}"
+        }
+        [Environment]::SetEnvironmentVariable("Path", $NewUserPath, "User")
+        $PathMarkerParent = Split-Path -Parent $PathMarker
+        if (-not (Test-Path -LiteralPath $PathMarkerParent -PathType Container)) {
+            New-Item -ItemType Directory -Path $PathMarkerParent -Force | Out-Null
+        }
+        [System.IO.File]::WriteAllText($PathMarker, "${CommandDir}`n", $UTF8NoBOM)
+    }
+    if (-not (($env:Path -split ';') | Where-Object {
+        $_.TrimEnd('\') -ieq $CommandDir.TrimEnd('\')
+    })) {
+        $env:Path = "${CommandDir};$env:Path"
+    }
+    & $CommandPath version | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "命令行入口无法启动 xparse-cli。请执行恢复脚本。"
+    }
 }
 
 function Get-TestAsset {
@@ -184,6 +269,14 @@ try {
         $UTF8NoBOM
     )
 
+    $Catalog = Read-Utf8Json $CatalogFile
+    $Catalog.connectors = @($TestEntry) + @(
+        $Catalog.connectors | Where-Object { $_.id -ne $TestEntry.id }
+    )
+    $CatalogJSON = $Catalog | ConvertTo-Json -Depth 100
+    [System.IO.File]::WriteAllText($CatalogDownload, "${CatalogJSON}`n", $UTF8NoBOM)
+    Read-Utf8Json $CatalogDownload | Out-Null
+
     if (Test-Path -LiteralPath $MarkerFile -PathType Leaf) {
         $OldSkills = "${ConnectorDir}\skills.test-refresh.${PID}"
         $ActiveRefresh = "${ActiveSkillsDir}.test-refresh.${PID}"
@@ -235,6 +328,7 @@ try {
         if (Test-Path -LiteralPath $ActiveRefresh -PathType Container) {
             Remove-Item -LiteralPath $ActiveRefresh -Recurse -Force
         }
+        Move-Item -LiteralPath $CatalogDownload -Destination $CatalogFile -Force
         Write-Host "WorkBuddy 已安装 TextIn xParse test Connector，文件已刷新。"
     } else {
         foreach ($Backup in @(
@@ -243,23 +337,16 @@ try {
             $MarketplaceIconBackup,
             $ProfileBackup,
             $NpmBackup,
+            $CommandBackup,
+            $LegacyCLIBackup,
+            $CommandMarker,
+            $PathMarker,
             $ActiveSkillsBackup
         )) {
             if (Test-Path -LiteralPath $Backup) {
                 throw "检测到未恢复的备份：${Backup}。请先运行恢复脚本。"
             }
         }
-
-        $Catalog = Read-Utf8Json $CatalogFile
-        $ExistingEntries = @(
-            $Catalog.connectors | Where-Object { $_.id -eq "textin-xparse" }
-        )
-        if ($ExistingEntries.Count -eq 0) {
-            $Catalog.connectors = @($TestEntry) + @($Catalog.connectors)
-        }
-        $CatalogJSON = $Catalog | ConvertTo-Json -Depth 100
-        [System.IO.File]::WriteAllText($CatalogDownload, "${CatalogJSON}`n", $UTF8NoBOM)
-        Read-Utf8Json $CatalogDownload | Out-Null
 
         Copy-Item -LiteralPath $CatalogFile -Destination $CatalogBackup
         if (Test-Path -LiteralPath $ConnectorDir -PathType Container) {
@@ -271,7 +358,8 @@ try {
         if (Test-Path -LiteralPath $ProfileDir -PathType Container) {
             Move-Item -LiteralPath $ProfileDir -Destination $ProfileBackup
         }
-        if (Test-Path -LiteralPath $NpmPrefix -PathType Container) {
+        if ((-not $env:XPARSE_TEST_ASSET_DIR -or $InstallCLIWithLocalAssets) -and
+            (Test-Path -LiteralPath $NpmPrefix -PathType Container)) {
             Move-Item -LiteralPath $NpmPrefix -Destination $NpmBackup
         }
         if (Test-Path -LiteralPath $ActiveSkillsDir -PathType Container) {
@@ -296,32 +384,46 @@ try {
     Clear-TestDownloads
 }
 
-if (-not $env:XPARSE_TEST_ASSET_DIR) {
-    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-        throw "缺少 Node.js 18 或更高版本，无法安装 npm CLI。"
-    }
-    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-        throw "缺少 npm，无法安装 xparse-cli。"
-    }
-    $NodeMajor = [int](& node -p "process.versions.node.split('.')[0]")
-    if ($NodeMajor -lt 18) {
-        throw "Node.js 版本过低（${NodeMajor}），xparse-cli 需要 Node.js 18 或更高版本。"
-    }
-    Write-Host "正在通过 npm 安装 test CLI：xparse-cli@${NpmVersion}"
-    & npm install --global --prefix $NpmPrefix "xparse-cli@${NpmVersion}"
-    if ($LASTEXITCODE -ne 0) {
-        throw "npm 安装 xparse-cli@${NpmVersion} 失败。请执行恢复脚本。"
-    }
-    if (-not (Test-Path -LiteralPath $CLIPath -PathType Leaf)) {
-        throw "test CLI 安装失败：未找到 ${CLIPath}。请执行恢复脚本。"
-    }
-    & $CLIPath --profile workbuddy config set base_url $ProfileBaseURL
-    if ($LASTEXITCODE -ne 0) {
-        throw "CLI 无法写入 ${EnvironmentLabel} Profile。请执行恢复脚本。"
+if (-not $env:XPARSE_TEST_ASSET_DIR -or $InstallCLIWithLocalAssets) {
+    $HadNodeOptions = Test-Path Env:NODE_OPTIONS
+    $OriginalNodeOptions = $env:NODE_OPTIONS
+    try {
+        Remove-Item Env:NODE_OPTIONS -ErrorAction SilentlyContinue
+        if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+            throw "缺少 Node.js 18 或更高版本，无法安装 npm CLI。"
+        }
+        if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) {
+            throw "缺少 npm，无法安装 xparse-cli。"
+        }
+        $NodeMajor = [int](& node -p "process.versions.node.split('.')[0]")
+        if ($NodeMajor -lt 18) {
+            throw "Node.js 版本过低（${NodeMajor}），xparse-cli 需要 Node.js 18 或更高版本。"
+        }
+        Write-Host "正在通过 npm 安装 test CLI：xparse-cli@${NpmVersion}（${NpmRegistry}）"
+        & npm.cmd install --global --prefix $NpmPrefix `
+            "--registry=${NpmRegistry}" "xparse-cli@${NpmVersion}"
+        if ($LASTEXITCODE -ne 0) {
+            throw "npm 安装 xparse-cli@${NpmVersion} 失败。请执行恢复脚本。"
+        }
+        if (-not (Test-Path -LiteralPath $CLIPath -PathType Leaf)) {
+            throw "test CLI 安装失败：未找到 ${CLIPath}。请执行恢复脚本。"
+        }
+        & $CLIPath --profile workbuddy config set base_url $ProfileBaseURL
+        if ($LASTEXITCODE -ne 0) {
+            throw "CLI 无法写入 ${EnvironmentLabel} Profile。请执行恢复脚本。"
+        }
+        Install-CommandLauncher
+    } finally {
+        if ($HadNodeOptions) {
+            $env:NODE_OPTIONS = $OriginalNodeOptions
+        } else {
+            Remove-Item Env:NODE_OPTIONS -ErrorAction SilentlyContinue
+        }
     }
 }
 
 Write-Host ""
 Write-Host "一键安装已完成：Connector、xparse-parse Skill、npm CLI ${NpmVersion} 和 ${EnvironmentLabel} Profile 均已就绪。"
+Write-Host "新终端可直接运行 xparse-cli；如当前终端尚未生效，请重新打开终端。"
 Write-Host "请完全退出并重新打开 WorkBuddy；需要验收登录归因时，再在 TextIn xParse 中点击“连接”。"
 Write-Host "测试结束后请执行对应版本目录中的 restore-workbuddy-production.ps1 恢复执行前状态。"

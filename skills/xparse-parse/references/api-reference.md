@@ -223,7 +223,7 @@ This section groups error codes by handling intent. It is meant for CLI and skil
 
 | Code | Meaning | Action |
 |------|---------|--------|
-| 40306 | Request rate limit exceeded | Retry later and reduce request frequency |
+| 40306 | Service-defined rate or per-request page limit | Follow structured `error_code`: retry `RATE_LIMITED`, reduce pages for `PAGE_LIMIT_EXCEEDED` |
 | 40307 | Daily free quota exhausted | Stop; ask whether to wait or explicitly retry with `--api paid` |
 
 #### Request & Parameter Errors

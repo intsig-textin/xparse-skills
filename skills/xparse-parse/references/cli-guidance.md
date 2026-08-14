@@ -3,7 +3,8 @@
 > Installation and quick start see [SKILL.md](../SKILL.md).
 
 Inside WorkBuddy, insert `--profile workbuddy` immediately after `xparse-cli`
-for every command. Standalone CLI commands remain unchanged.
+for every command. The Connector uses WorkBuddy's standard global npm runtime,
+matching other npm CLI Connectors. Standalone CLI commands remain unchanged.
 
 ## Authentication and paid API
 
@@ -33,9 +34,12 @@ AppKey priority: CLI flags → env vars → config file. Normal OAuth login uses
 the shipped public client automatically; private deployments may override it
 through a CLI flag, `XPARSE_OAUTH_CLIENT_ID`, or the config file.
 WorkBuddy keeps its credentials in the isolated `workbuddy` profile and uses
-Device OAuth. Login lets `auto` identify and use an existing free package; it
-does not authorize an explicit paid parse. Only use `--api paid` after the user
-has approved paid service behavior.
+Device OAuth. The current quota service reports `free_package` only for an
+AppKey-authenticated request; do not infer package access from Device OAuth.
+Automatic package routing uses only `free_package.free_remain_count`; the
+historical `free_count` field is display-only.
+Login does not authorize an explicit paid parse. Only use `--api paid` after the
+user has approved paid service behavior.
 
 See [authentication.md](authentication.md) for all login modes and
 [textin-key-setup.md](textin-key-setup.md) for legacy AppKey setup.
@@ -45,9 +49,9 @@ See [authentication.md](authentication.md) for all login modes and
 | Dimension | Free/automatic route | Explicit paid route |
 |-----------|----------------------|---------------------|
 | File types | PDF and supported images | Office, HTML, OFD, RTF, PDF, images, and other service-supported types |
-| Request limits | Read current page and MB limits from `xparse-cli quota --output json`; the CLI splits eligible PDFs automatically | Service/account configuration is authoritative |
+| Request limits | Read current page and MB limits from `xparse-cli quota --output json`; reduce the file or use an explicit `--page-range` when the structured error requires it | Service/account configuration is authoritative |
 | Allowance | Daily free pages, then authenticated free-package pages reported by quota | Existing server package/balance billing behavior |
-| Authentication | Anonymous or OAuth-attributed | OAuth Bearer or AppKey + Secret |
+| Authentication | Anonymous; AppKey identity is used when querying package quota | OAuth Bearer or AppKey + Secret, subject to the selected service route |
 
 > 遇到 40302（文件超限）、40307（每日额度用完）或 40303（格式不支持）时，参考 [error-handling.md](error-handling.md) 决定是否升级到付费 API。
 

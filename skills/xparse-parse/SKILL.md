@@ -17,7 +17,11 @@ Inside the TextIn xParse WorkBuddy Connector, prefix every invocation with:
 xparse-cli --profile workbuddy <command> ...
 ```
 
-Outside WorkBuddy, use `xparse-cli <command> ...`.
+The Connector declares a Node.js runtime and installs the pinned CLI with the
+standard global npm prefix, so WorkBuddy supplies `xparse-cli` on PATH. On
+Windows Connector lifecycle commands use `xparse-cli.cmd`; document-task shell
+commands may use the command form supported by the active shell. Outside
+WorkBuddy, use `xparse-cli <command> ...`.
 
 For every new WorkBuddy user request, create one private `0600` JSON file before
 the first xParse command:
@@ -44,7 +48,7 @@ snapshot.
 
 | Mode | CLI behavior | Use it when |
 |------|--------------|-------------|
-| `--api auto` | Uses the daily free API allowance first. For an authenticated user, it can then use the reported free-package allowance through the existing authenticated route. | Default for supported PDF and image work. |
+| `--api auto` | Uses the daily free API allowance first. When quota reports an AppKey-authenticated free package with sufficient `free_remain_count`, it can use that package through the existing authenticated route. | Default for supported PDF and image work. |
 | `--api free` | Forces the free endpoint and does not use the authenticated free-package route. | The user explicitly requires the free endpoint only. |
 | `--api paid` | Forces the paid endpoint and follows the service's existing package/balance billing behavior. | The user explicitly approves paid use, or approves it after learning that the format requires the paid API. |
 
@@ -56,13 +60,19 @@ needs explanation, or before proposing a paid retry. Read all returned facts:
 
 - daily free pages remaining and reset time;
 - whether the request is authenticated;
-- authenticated free-package total, used, and remaining pages when present;
+- authenticated free-package total, historical used count, and current
+  `free_remain_count` when present (routing uses only `free_remain_count`);
 - maximum pages and file size per request.
 
 Do not cache or calculate an allowance in the Skill. `parse --api auto` performs
 its own quota preflight, and the parse response remains authoritative if quota
 changes between inspection and execution. The Skill must not promise stronger
 billing guarantees than the existing server provides.
+
+WorkBuddy Device OAuth and AppKey are different identities. If quota returns
+`authenticated=false` or omits `free_package`, do not infer package access from
+an OAuth login indicator. Treat only fields in the current quota response as
+available.
 
 The free endpoint supports PDF and images. Office, HTML, OFD, and other formats
 may require `--api paid`; explain this and obtain the user's approval before
@@ -165,7 +175,7 @@ Check installation with `xparse-cli version`. The current beta package requires
 Node.js 18 or newer and can be installed with:
 
 ```bash
-npm install --global xparse-cli@2.2.1-beta.1
+npm install --global --registry=https://registry.npmmirror.com xparse-cli@2.2.1-beta.2
 ```
 
 The WorkBuddy Connector installs its pinned CLI version automatically. Do not
