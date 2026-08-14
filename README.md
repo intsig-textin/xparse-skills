@@ -14,21 +14,21 @@ npx skills add intsig-textin/xparse-skills
 
 ### xparse-parse
 
-Parse documents into Markdown or structured JSON via `xparse-cli`.
+Parse complete documents or navigate targeted sections, pages, facts, and tables via `xparse-cli`.
 
 **Supported formats:** PDF · Images (JPG/PNG/BMP/TIFF/WebP) · Word · PowerPoint · Excel · HTML · OFD · RTF
 
 **Use when:**
-- User provides a local file or document URL to read, convert, or extract content from
+- User provides a local file or document URL to read, convert, search, or extract content from
 - Task requires turning a document into agent-friendly text before further processing
 - Preparing content for summarization, analysis, or downstream workflows
 
 **Quick start:**
 
 ```bash
-xparse-cli parse report.pdf                # Markdown → stdout
-xparse-cli parse report.pdf --view json    # Structured JSON output
-xparse-cli parse report.pdf --output ./result/   # Save to directory
+xparse-cli parse report.pdf --api auto                       # Markdown → stdout
+xparse-cli parse report.pdf --api auto --view json           # Structured JSON output
+xparse-cli parse report.pdf --api auto --output ./result/    # Save to directory
 ```
 
 > See [SKILL.md](skills/xparse-parse/SKILL.md) for full routing rules, error handling, and references.
@@ -40,11 +40,7 @@ xparse-cli parse report.pdf --output ./result/   # Save to directory
 **Install:**
 
 ```bash
-# Linux / macOS
-source <(curl -fsSL https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.sh)
-
-# Windows (PowerShell)
-irm https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.ps1 | iex
+npm install --global xparse-cli@2.2.1-beta.1
 ```
 
 **Key commands:**
@@ -52,18 +48,23 @@ irm https://dllf.intsig.net/download/2026/Solution/xparse-cli/install.ps1 | iex
 | Command | Description |
 |---------|-------------|
 | `xparse-cli parse <file>` | Parse a document to Markdown or JSON |
+| `xparse-cli quota` | Show current daily free and authenticated free-package quota |
+| `xparse-cli get_doc_info <file>` | Create the stable local document ID for navigation |
+| `xparse-cli get_outline <doc_id>` | Navigate the cached document outline |
+| `xparse-cli search_text <doc_id> <pattern>` | Search cached document content |
 | `xparse-cli auth` | Configure API credentials (interactive) |
 | `xparse-cli download --from result.json` | Download images from parse results |
-| `xparse-cli update` | Self-update to the latest version |
 | `xparse-cli version` | Show version info |
 
-**Free vs paid API:**
+**Automatic, free, and paid API selection:**
 
-| | Free | Paid |
-|-|------|------|
-| Supported formats | PDF, images | All formats |
-| Credentials | Not required | `xparse-cli auth` |
-| File size limit | 10 MB | 500 MB |
+| Mode | Behavior |
+|------|----------|
+| `--api auto` | Default; uses current daily free quota, then an authenticated user's reported free-package quota |
+| `--api free` | Force the free endpoint only |
+| `--api paid` | Explicit paid route; requires user approval and valid OAuth/AppKey credentials |
+
+Run `xparse-cli quota` for current page and file-size limits instead of relying on hardcoded values.
 
 > Full CLI documentation: [cli/README.md](cli/README.md)
 

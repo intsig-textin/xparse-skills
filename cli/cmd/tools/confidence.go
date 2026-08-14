@@ -91,7 +91,7 @@ func runGetConfidence(cmd *cobra.Command, args []string) error {
 		}
 		if targetPage == 0 {
 			return generalErr("element not found in cache: "+confElementID,
-				"[fix] ensure the element_id is correct and ensure_parsed has been called")
+				"[fix] ensure the element_id is correct and the complete local document has been parsed")
 		}
 	} else {
 		scope = "page"

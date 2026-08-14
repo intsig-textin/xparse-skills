@@ -54,7 +54,7 @@ func runReadContent(cmd *cobra.Command, args []string) error {
 
 	if !cache.Has(docID) {
 		return generalErr("cache miss for doc_id: "+docID,
-			"[fix] call ensure_parsed first")
+			"[fix] run parse for the complete local document first")
 	}
 
 	result, err := cache.Get(docID)

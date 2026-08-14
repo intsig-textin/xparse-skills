@@ -12,6 +12,7 @@ import (
 
 	"github.com/intsig-textin/xparse-skills/cli/internal/config"
 	"github.com/intsig-textin/xparse-skills/cli/internal/exitcode"
+	"github.com/intsig-textin/xparse-skills/cli/internal/parsecache"
 	"github.com/intsig-textin/xparse-skills/cli/internal/telemetry"
 )
 
@@ -292,6 +293,10 @@ func runSingleParse(client *XParserClient, source string, opts *ParseOptions) er
 		return generalErr(exitcode.ErrNoResultData,
 			"[retry] once for "+source+"; if persists, try a different file or format")
 	}
+	if err := cacheLocalParse(resp, source, opts.PageRange); err != nil {
+		return generalErr("failed to cache parse result: "+err.Error(),
+			"[ask human] check disk space and write permissions at ~/.xparse-cli/")
+	}
 
 	return outputResult(resp, source)
 }
@@ -385,6 +390,11 @@ func runBatchParse(client *XParserClient, sources []string, opts *ParseOptions) 
 				fmt.Sprintf("[retry] %s", retryCmd)})
 			continue
 		}
+		if err := cacheLocalParse(resp, source, opts.PageRange); err != nil {
+			failures = append(failures, fileError{source, "failed to cache parse result",
+				"[ask human] check disk space and write permissions at ~/.xparse-cli/"})
+			continue
+		}
 
 		if _, err := saveResult(resp, source, parseOutput); err != nil {
 			failures = append(failures, fileError{source, exitcode.ErrSaveResult,
@@ -402,6 +412,14 @@ func runBatchParse(client *XParserClient, sources []string, opts *ParseOptions) 
 		return &exitError{code: exitcode.GeneralError, msg: exitcode.ErrBatchPartial}
 	}
 	return nil
+}
+
+func cacheLocalParse(resp *ParseResponse, source, pageRange string) error {
+	if isURL(source) {
+		return nil
+	}
+	_, _, err := parsecache.Store(source, pageRange, resp)
+	return err
 }
 
 // ── output ──

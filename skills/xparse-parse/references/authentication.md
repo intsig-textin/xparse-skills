@@ -123,9 +123,10 @@ warning and does not prevent local logout. Logout does not delete remembered
 consent; use the next browser login with `--prompt=consent` when a fresh
 confirmation is required.
 
-Omitting `--api` and using `--api auto` or `--api free` always selects the
-anonymous free endpoint, whether credentials exist or not. A successful login
-records the preferred authentication method only for an explicit
-`--api paid` request. In paid mode, old configuration files remain AppKey-first
-when both AppKey and OAuth exist, and `--auth-method` temporarily overrides
-that paid-mode preference.
+Omitting `--api` is equivalent to `--api auto`. Automatic mode queries current
+quota, uses the daily free allowance first, and can use a logged-in user's
+reported free-package allowance. `--api free` forces the free endpoint only.
+A successful login identifies the user and records the preferred authentication
+method, but it is not approval to run `--api paid`. In paid mode, old
+configuration files remain AppKey-first when both AppKey and OAuth exist, and
+`--auth-method` temporarily overrides that paid-mode preference.

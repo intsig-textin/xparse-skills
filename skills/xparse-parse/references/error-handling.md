@@ -7,7 +7,7 @@ Use this matrix to decide whether to STOP, RETRY, or CONFIGURE:
 | Error Category | Error Codes | Decision | Action |
 |---|---|---|---|
 | **Transient/Network** | 30203, 500, 50207 | RETRY (once) | Retry same command with backoff |
-| **Free Limit Hit** | 40307 | STOP + ASK | Ask whether the user wants to wait for reset or explicitly use the paid API |
+| **Automatic Free Sources Exhausted** | 40307 | INSPECT + STOP + ASK | Run `quota`, explain daily/free-package availability, then ask whether to wait or explicitly use the paid API |
 | **Rate Limit** | 40306 | RETRY (with delay) | Reduce request frequency, retry later |
 | **File Size Exceeded** | 40302 | STOP + ASK or ADJUST | Suggest `--page-range`; ask before an explicit `--api paid` retry |
 | **Invalid Credentials** | 40101, 40102, 40103 | STOP + DEBUG | AppKey users check TextIn console; OAuth users log in again |
@@ -30,7 +30,7 @@ Use this matrix to decide whether to STOP, RETRY, or CONFIGURE:
 - Unknown error or internal service error
 
 **What to say:**
-- Free limit: `The free parse limit has been reached. Wait for quota reset, or explicitly approve a paid retry with --api paid. Logging in alone does not change the route.`
+- Free limit: `The currently reported daily and free-package allowances cannot cover this parse. Wait for reset, or explicitly approve a paid retry with --api paid.`
 - File too large: `File exceeds the free tier limit. Use --page-range, or explicitly approve a paid retry with --api paid.`
 - Unsupported file: `This file type is not supported. Supported formats: PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), OFD, Image files.`
 - Password required: `Document is password-protected. Rerun with --password <your_password>.`
@@ -52,8 +52,8 @@ xparse-cli parse <FILE> [options]  # Retry once, same command
 ```
 
 **DO NOT retry when:**
-- Free limit is hit (40307) — do not retry unless the user explicitly approves
-  `--api paid`; logging in and rerunning the same command remains free
+- Automatic free sources are exhausted (40307) — inspect `quota`; do not retry
+  with `--api paid` unless the user explicitly approves it
 - File is unsupported (40301, 40303, 40425, 40426) — no retry will fix
 - Credentials are invalid (40101, 40102, 40103) — user must fix credentials first
 - Parameters are invalid (40004, 40400, 40424, 40427) — command syntax is wrong
@@ -65,17 +65,16 @@ xparse-cli parse <FILE> [options]  # Retry once, same command
 
 ### Scenario 1: Free Limit Hit
 ```
-User: xparse-cli parse large-document.pdf
-Error: 40307 (Free daily quota exhausted)
+User: xparse-cli parse large-document.pdf --api auto
+Error: 40307 (Available free quota is insufficient)
 
 Agent action:
-1. DO NOT retry
-2. Show message:
-   "The free parse limit has been reached. You can wait for quota reset.
-    If you want to use the paid API, explicitly approve a retry with
-    --api paid."
-3. Do not treat login or stored credentials as approval to use the paid API.
-4. Wait for the user's explicit choice before any paid retry.
+1. Run `xparse-cli quota` to obtain the current daily and authenticated
+   free-package values.
+2. Do not retry the same parse when those sources are insufficient.
+3. Explain the reported values and reset time.
+4. Do not treat login or stored credentials as approval to use the paid API.
+5. Wait for the user's explicit choice before any `--api paid` retry.
 ```
 
 ### Scenario 2: File Too Large (Transient Network)
@@ -97,11 +96,11 @@ User: xparse-cli parse 15mb-file.pdf
 Error: 40302 (File exceeds max size)
 
 Agent action:
-1. Explain that the default request used the free API even if credentials are
-   already stored.
-2. Suggest `xparse-cli parse 15mb-file.pdf --page-range 1-5`.
-3. If splitting is insufficient, ask whether the user explicitly wants a paid
-   retry.
+1. Explain the actual route and server-reported size limit.
+2. Let `--api auto` split an eligible local PDF automatically. For a non-PDF,
+   explain that automatic splitting is unavailable.
+3. If the supported automatic route is insufficient, ask whether the user
+   explicitly wants a paid retry.
 4. Only after approval, ensure paid credentials are available and retry with
    `xparse-cli parse 15mb-file.pdf --api paid`.
 ```
@@ -174,7 +173,7 @@ Parse failed?
 
 | Situation | Message |
 |---|---|
-| Free limit hit | `The free parse limit has been reached. Wait for quota reset, or explicitly approve a paid retry with --api paid. Logging in alone does not change the route.` |
+| Automatic free sources exhausted | `The reported daily and free-package allowances cannot cover this parse. Wait for reset, or explicitly approve a paid retry with --api paid.` |
 | File too large | `File exceeds the free tier limit. Use --page-range 1-5, or explicitly approve a paid retry with --api paid.` |
 | Unsupported file | `This file type is not supported. Supported: PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), OFD, Images.` |
 | Password required | `Document is password-protected. Rerun with: xparse-cli parse <FILE> --password <your_password>` |

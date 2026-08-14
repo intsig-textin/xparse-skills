@@ -13,7 +13,7 @@ import (
 )
 
 var trackedCommands = map[string]bool{
-	"parse": true, "get_doc_info": true, "ensure_parsed": true, "get_outline": true,
+	"parse": true, "get_doc_info": true, "get_outline": true,
 	"read_content": true, "read_pages": true, "search_text": true, "get_confidence": true,
 }
 

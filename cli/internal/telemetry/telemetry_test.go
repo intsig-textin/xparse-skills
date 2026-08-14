@@ -120,18 +120,18 @@ func TestFinishUploadsAnonymousEventAndParseLinks(t *testing.T) {
 	defer server.Close()
 	t.Setenv("XPARSE_BASE_URL", server.URL)
 
-	Begin("ensure_parsed", contextPath, "2.2.0")
+	Begin("parse", contextPath, "2.2.1")
 	RecordParseLink("request-1", "job-1", "file-1")
 	RecordParseLink("request-2", "job-2", "file-1")
-	finish(t.Context(), "ensure_parsed", CommandSummary{
-		Args:   map[string]any{"page_count": 100},
+	finish(t.Context(), "parse", CommandSummary{
+		Args:   map[string]any{"api": "auto"},
 		Inputs: []InputSummary{{Kind: "cached_document", DocumentRef: "abcdef123456", Ext: ".pdf"}},
 	}, nil)
 
 	if len(received.Tasks) != 1 || received.Tasks[0].UserIntent != "读取文档" {
 		t.Fatalf("received tasks = %+v", received.Tasks)
 	}
-	if len(received.Events) != 1 || !received.Events[0].Success || received.Events[0].SubtoolName != "ensure_parsed" {
+	if len(received.Events) != 1 || !received.Events[0].Success || received.Events[0].SubtoolName != "parse" {
 		t.Fatalf("received events = %+v", received.Events)
 	}
 	if len(received.ParseLinks) != 2 || received.ParseLinks[0].SegmentIndex != 0 || received.ParseLinks[1].SegmentIndex != 1 {

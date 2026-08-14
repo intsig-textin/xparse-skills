@@ -14,14 +14,12 @@ import (
 // RegisterCommands adds all tool primitive commands to the given root command.
 func RegisterCommands(rootCmd *cobra.Command) {
 	getDocInfoCmd.RunE = telemetry.WrapRunE("get_doc_info", summarizeGetDocInfo, runGetDocInfo)
-	ensureParsedCmd.RunE = telemetry.WrapRunE("ensure_parsed", summarizeEnsureParsed, runEnsureParsed)
 	getOutlineCmd.RunE = telemetry.WrapRunE("get_outline", summarizeGetOutline, runGetOutline)
 	readContentCmd.RunE = telemetry.WrapRunE("read_content", summarizeCachedDocument, runReadContent)
 	readPagesCmd.RunE = telemetry.WrapRunE("read_pages", summarizeReadPages, runReadPages)
 	searchTextCmd.RunE = telemetry.WrapRunE("search_text", summarizeSearchText, runSearchText)
 	getConfidenceCmd.RunE = telemetry.WrapRunE("get_confidence", summarizeGetConfidence, runGetConfidence)
 	rootCmd.AddCommand(getDocInfoCmd)
-	rootCmd.AddCommand(ensureParsedCmd)
 	rootCmd.AddCommand(getOutlineCmd)
 	rootCmd.AddCommand(readContentCmd)
 	rootCmd.AddCommand(readPagesCmd)
@@ -33,16 +31,6 @@ func summarizeGetDocInfo(_ *cobra.Command, args []string) telemetry.CommandSumma
 	summary := telemetry.CommandSummary{Args: map[string]any{}}
 	if len(args) > 0 {
 		summary.Inputs = []telemetry.InputSummary{telemetry.SummarizeSource(args[0])}
-	}
-	return summary
-}
-
-func summarizeEnsureParsed(_ *cobra.Command, args []string) telemetry.CommandSummary {
-	summary := summarizeCachedDocument(nil, args)
-	if len(args) > 1 {
-		if pageCount, err := strconv.Atoi(args[1]); err == nil {
-			summary.Args["page_count"] = pageCount
-		}
 	}
 	return summary
 }

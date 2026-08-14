@@ -19,7 +19,7 @@ var getOutlineCmd = &cobra.Command{
 	Use:   "get_outline <doc_id>",
 	Short: "Get document outline/table of contents (from cache, zero API calls)",
 	Long: `Return the hierarchical document outline from cached parse results.
-Requires ensure_parsed to have been called first.
+Requires a successful full-document local parse first.
 
 By default only returns the top 2 levels of headings to keep output compact.
 Use --depth 0 to get all levels, or --parent-id to drill into a section.
@@ -54,7 +54,7 @@ func runGetOutline(cmd *cobra.Command, args []string) error {
 
 	if !cache.Has(docID) {
 		return generalErr("cache miss for doc_id: "+docID,
-			"[fix] call ensure_parsed first")
+			"[fix] run parse for the complete local document first")
 	}
 
 	result, err := cache.Get(docID)
