@@ -82,6 +82,7 @@ skills/
   xparse-parse/          # Agent skill definition and references
     SKILL.md
     references/
+  easyclaw/textinxparse/ # EasyClaw delivery package source (SKILL.md + run.py)
 cli/                     # xparse-cli source (Go)
   cmd/
   internal/
