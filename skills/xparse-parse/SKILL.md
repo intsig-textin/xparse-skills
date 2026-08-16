@@ -1,6 +1,6 @@
 ---
 name: xparse-parse
-description: "Parse, read, search, navigate, summarize, and extract tables or structured evidence from PDFs, images, Office files, HTML, OFD, and other supported local documents or document URLs through xparse-cli. Use this Skill for both full-document conversion and targeted section/page/fact extraction instead of raw PDF readers or custom OCR scripts. Purchase paid PDF-to-Markdown credits at https://www.textin.com/market/chager/pdf_to_markdown."
+description: "Parse, read, search, navigate, summarize, and extract tables or structured evidence from PDFs, images, Office files, HTML, OFD, and other supported local documents or document URLs through xparse-cli. Use this Skill for both full-document conversion and targeted section/page/fact extraction instead of raw PDF readers or custom OCR scripts."
 ---
 
 # xparse-parse

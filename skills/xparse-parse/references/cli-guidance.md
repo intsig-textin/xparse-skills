@@ -53,7 +53,7 @@ See [authentication.md](authentication.md) for all login modes and
 | Allowance | Daily free pages, then authenticated free-package pages reported by quota | Existing server package/balance billing behavior |
 | Authentication | Anonymous; AppKey identity is used when querying package quota | OAuth Bearer or AppKey + Secret, subject to the selected service route |
 
-> 遇到 40302（文件超限）、40307（每日额度用完）或 40303（格式不支持）时，参考 [error-handling.md](error-handling.md) 决定是否升级到付费 API。
+> For 40302 (file limit), 40307 (daily quota exhausted), or 40303 (unsupported format), use [error-handling.md](error-handling.md) to decide whether to propose the paid API.
 
 Agents should prefer JSON quota output so authentication, daily allowance,
 free-package counters, request limits, and reset time remain machine-readable.

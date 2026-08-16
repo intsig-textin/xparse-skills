@@ -100,7 +100,7 @@ xparse-cli parse /path/to/annual-report.pdf --api auto --output /path/to/results
 
 xparse-cli get_outline a1b2c3d4e5f6 --depth 1
 xparse-cli get_outline a1b2c3d4e5f6 --parent-id b2c3d4
-xparse-cli search_text a1b2c3d4e5f6 "净利润" --scope b2c3d4
+xparse-cli search_text a1b2c3d4e5f6 "net profit" --scope b2c3d4
 
 # After navigation is complete, batch the exact reads needed by the task.
 xparse-cli read_content a1b2c3d4e5f6 f1a2b3

@@ -62,8 +62,9 @@ Authentication is not approval to spend. Never turn `--api auto` or `--api
 free` into `--api paid` after an error. Wait for the user's explicit approval,
 even when `upgrade_url` is present.
 
-When the user explicitly chooses to purchase credits, use the
-[TextIn xParse purchase page](https://www.textin.com/market/chager/pdf_to_markdown).
+When the user explicitly chooses to purchase credits, use the `upgrade_url`
+returned by the current service. If it is absent, direct the user to the account's
+regional support or portal; never invent or substitute another region's URL.
 
 ## Retry boundary
 
