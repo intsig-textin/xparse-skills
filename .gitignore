@@ -18,3 +18,7 @@ cli/xparse-cli.exe
 *.swo
 .dev-flow
 .design
+.history/
+
+# Python
+__pycache__/
