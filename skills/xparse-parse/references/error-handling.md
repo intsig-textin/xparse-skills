@@ -51,6 +51,25 @@ message text or an old numeric API code.
 | `INVALID_ARGUMENT`, `INVALID_PAGE_RANGE`, `INVALID_PASSWORD` | Correct the input, then run once with the corrected arguments. |
 | `BATCH_PARTIAL_FAILURE` | Inspect every `details.failures[]` item. Never hide failed inputs or claim the batch fully succeeded. |
 
+## Durable Task states
+
+Task commands return a persistent `task_id` and the latest Run state. Branch on
+the state rather than repeating `task run`:
+
+| State | Agent decision |
+|-------|----------------|
+| `scheduled`, `running` | Keep the Task ID. Let the default wait finish, or use `task status` later when the original command used `--wait=false` or timed out. |
+| `completed` | Use `task read` for selected evidence or `task export` for the full set. |
+| `partial_failed`, `failed` | Run `task debug`; report successful and failed files separately. Do not recreate the whole Task. |
+| `waiting_paid_authorization` | Stop and obtain explicit user approval. Authentication alone is not approval to spend. The current CLI exposes no paid-authorization resume command, so preserve the Task ID and do not invent one. |
+| `waiting_funds` | Stop and tell the user that sufficient funds are required before retrying settlement. |
+| `cancelled` | Report cancellation. Start a new Task only if the user asks. |
+
+For password failures such as API code `40423`, ask for the password, pass a
+JSON map through stdin with `--passwords-stdin`, and run `task continue`. Never
+place passwords in command arguments, a Task config file, telemetry, or the
+response. See [task-runtime.md](task-runtime.md) for the recovery sequence.
+
 ## Quota and paid boundary
 
 Run `quota --output json` when explaining `PAID_QUOTA_REQUIRED`. Routing uses

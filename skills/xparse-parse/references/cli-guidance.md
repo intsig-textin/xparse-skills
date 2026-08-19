@@ -82,6 +82,15 @@ xparse-cli parse document.pdf --api auto --output ./result/
 | Specific pages only | `xparse-cli parse doc.pdf --api auto --page-range 1-5` |
 | Encrypted document | `xparse-cli parse doc.pdf --api auto --password secret123` |
 | Save to directory | `xparse-cli parse doc.pdf --api auto --output ./result/` |
+| Run a durable local-file batch | `xparse-cli task run --files 'docs/*.pdf' --api auto` |
+| Check a durable Task | `xparse-cli task status <TASK_ID>` |
+| Read one Task result | `xparse-cli task read <TASK_ID> <FILE_OR_RESOURCE>` |
+| Export all completed Task results | `xparse-cli task export <TASK_ID> --out-dir ./task-output` |
+| Inspect Task failures | `xparse-cli task debug <TASK_ID>` |
+
+Task Runtime is currently domestic-only and requires authentication. Its
+`auto`/`free` modes create the Agent free-first Task and do not fall back to a
+paid Task. See [task-runtime.md](task-runtime.md) before choosing Task commands.
 
 ## Advanced Options
 

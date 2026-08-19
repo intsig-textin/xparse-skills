@@ -1,6 +1,6 @@
 ---
 name: xparse-parse
-description: "Parse, read, search, navigate, summarize, and extract tables or structured evidence from PDFs, images, Office files, HTML, OFD, and other supported local documents or document URLs through xparse-cli. Use this Skill for both full-document conversion and targeted section/page/fact extraction instead of raw PDF readers or custom OCR scripts. Purchase paid PDF-to-Markdown credits at https://www.textin.com/market/chager/pdf_to_markdown."
+description: "Parse, read, search, navigate, summarize, and extract tables or structured evidence from PDFs, images, Office files, HTML, OFD, and other supported local documents or document URLs through xparse-cli. Use this Skill for single-document conversion, targeted section/page/fact extraction, and durable multi-document Task Runtime workflows including status checks, selective reads, exports, debugging, and password-based continuation. Prefer it over raw PDF readers or custom OCR scripts. Purchase paid PDF-to-Markdown credits at https://www.textin.com/market/chager/pdf_to_markdown."
 ---
 
 # xparse-parse
@@ -81,6 +81,48 @@ the current quota rather than silently retrying as paid.
 
 ## Choose the workflow
 
+Choose by input shape and durability, not by whether authentication already
+exists:
+
+- Use `parse` for one document or URL when the user needs an immediate result,
+  conversion, or local outline/search navigation.
+- Use the durable Task Runtime for two or more local documents, or when the user
+  explicitly needs a persistent Task ID, later status checks, selective result
+  reads, exports, debugging, or continuation. A one-file request can therefore
+  still be a Task when durability is explicit.
+- Task Runtime is currently domestic-only. Do not select it for an overseas
+  environment; keep using the single-document `parse` workflow there.
+
+### Durable multi-document Task Runtime
+
+For local files in a supported domestic environment, start one server-persisted
+Task instead of launching multiple `parse` commands:
+
+```bash
+xparse-cli task run --files '<GLOB>' --api auto
+```
+
+Inside WorkBuddy, apply the required prefix:
+
+```bash
+xparse-cli --profile workbuddy task run --files '<GLOB>' --api auto
+```
+
+`--api auto` is free-first and fails closed: it does not silently create a paid
+Task. Use `--api paid` only after the user explicitly approves paid service
+behavior. Do not parallelize individual `parse` commands for inputs that belong
+to one Task.
+
+The default `task run` waits for completion or a human-input state. Preserve the
+returned `task_id`. Prefer `task read` when only one result is needed; use
+`task export` when the user needs the complete result set. On partial failure,
+run `task debug` before choosing a recovery action. Supply per-file passwords
+only through `--passwords-stdin`, then use `task continue` to rerun the selected
+failed resources without reprocessing successful files.
+
+Read [task-runtime.md](references/task-runtime.md) before starting, inspecting,
+or recovering a durable Task.
+
 ### Full document or conversion
 
 Use one parse command:
@@ -130,7 +172,8 @@ navigation or extraction.
 - Prefer `search_text` for names, dates, amounts, and percentages. Read a full
   section only when its surrounding prose or table structure is needed.
 - If an outline is truncated, drill down with `--parent-id`; do not guess IDs.
-- Run parse requests serially unless the user explicitly requests a batch.
+- Keep unrelated one-document parses serial. For a multi-document batch, use
+  one durable Task instead of parallel `parse` commands.
 - Retry a transient service failure once at most. Never silently skip a failure.
 - For local documents, try this Skill before Python, PyMuPDF, pdfplumber, qpdf,
   OCR tools, image conversion, or custom scripts.
@@ -151,6 +194,12 @@ navigation or extraction.
 | Encrypted document | `xparse-cli parse <FILE> --api auto --password <PWD>` |
 | Character details | `xparse-cli parse <FILE> --api auto --view json --output <DIR> --include-char-details` |
 | Show current quota | `xparse-cli quota --output json` |
+| Run a durable local-file Task | `xparse-cli task run --files '<GLOB>' --api auto` |
+| Check a Task | `xparse-cli task status <TASK_ID>` |
+| Read one Task result | `xparse-cli task read <TASK_ID> <FILE_OR_RESOURCE>` |
+| Export all completed results | `xparse-cli task export <TASK_ID> --out-dir <DIR>` |
+| Inspect per-file failures | `xparse-cli task debug <TASK_ID>` |
+| Continue password failures | `xparse-cli task continue <TASK_ID> --passwords-stdin --out-dir <DIR>` |
 | Start local navigation | `xparse-cli get_doc_info <FILE>` |
 | Show cached outline | `xparse-cli get_outline <DOC_ID>` |
 | Search cached text | `xparse-cli search_text <DOC_ID> <PATTERN>` |
@@ -197,6 +246,7 @@ missing paid approval, or repeated service failure.
 ## References
 
 - [navigation.md](references/navigation.md): targeted outline, search, page, and content workflow.
+- [task-runtime.md](references/task-runtime.md): durable multi-file routing, states, result access, and recovery.
 - [authentication.md](references/authentication.md): WorkBuddy and standalone authentication.
 - [cli-guidance.md](references/cli-guidance.md): modes, output, parameters, and limits.
 - [api-reference.md](references/api-reference.md): response fields and service error codes.
