@@ -90,13 +90,16 @@ exists:
   explicitly needs a persistent Task ID, later status checks, selective result
   reads, exports, debugging, or continuation. A one-file request can therefore
   still be a Task when durability is explicit.
-- Task Runtime is currently domestic-only. Do not select it for an overseas
-  environment; keep using the single-document `parse` workflow there.
+- Task Runtime control-plane routes and OAuth authentication are available in
+  both domestic and overseas environments. Free-first Task billing is a
+  separate capability: if the selected environment returns
+  `TASK_FREE_MODE_UNAVAILABLE`, stop and explain it. Never replace the Task with
+  serial `parse` calls or silently switch to paid execution.
 
 ### Durable multi-document Task Runtime
 
-For local files in a supported domestic environment, start one server-persisted
-Task instead of launching multiple `parse` commands:
+For local files, start one server-persisted Task instead of launching multiple
+`parse` commands:
 
 ```bash
 xparse-cli task run --files '<GLOB>' --api auto
@@ -113,12 +116,22 @@ Task. Use `--api paid` only after the user explicitly approves paid service
 behavior. Do not parallelize individual `parse` commands for inputs that belong
 to one Task.
 
-The default `task run` waits for completion or a human-input state. Preserve the
-returned `task_id`. Prefer `task read` when only one result is needed; use
-`task export` when the user needs the complete result set. On partial failure,
-run `task debug` before choosing a recovery action. Supply per-file passwords
-only through `--passwords-stdin`, then use `task continue` to rerun the selected
-failed resources without reprocessing successful files.
+`task run` returns after the server accepts the Run. In WorkBuddy, stderr is an
+`xparse_event.v1` JSONL stream and stdout contains exactly one final submission
+JSON. Preserve `operation_id`, `task_id`, and `run_id`. If submission fails or
+the process loses its response, reuse the observed `operation_id` with
+`--operation-id`; never invent a new ID for the same logical submission.
+
+Use `task status <TASK_ID> --run-id <RUN_ID>` for bounded progress checks. Start
+at 2 seconds, then back off to 5, 10, 20, and 30 seconds; do not spend more than
+about two minutes polling in one Agent turn. Return control with the IDs and
+current state when work is still running. Never start a duplicate Task merely
+because the Run is still `scheduled` or `running`.
+Prefer `task read` when only one result is needed; use `task export` when the
+user needs the complete result set. On partial failure, run `task debug` before
+choosing a recovery action. Supply per-file passwords only through
+`--passwords-stdin`, then use `task continue` to rerun the selected failed
+resources without reprocessing successful files.
 
 Read [task-runtime.md](references/task-runtime.md) before starting, inspecting,
 or recovering a durable Task.
@@ -195,11 +208,13 @@ navigation or extraction.
 | Character details | `xparse-cli parse <FILE> --api auto --view json --output <DIR> --include-char-details` |
 | Show current quota | `xparse-cli quota --output json` |
 | Run a durable local-file Task | `xparse-cli task run --files '<GLOB>' --api auto` |
-| Check a Task | `xparse-cli task status <TASK_ID>` |
+| Check an exact Task Run | `xparse-cli task status <TASK_ID> --run-id <RUN_ID>` |
 | Read one Task result | `xparse-cli task read <TASK_ID> <FILE_OR_RESOURCE>` |
 | Export all completed results | `xparse-cli task export <TASK_ID> --out-dir <DIR>` |
 | Inspect per-file failures | `xparse-cli task debug <TASK_ID>` |
-| Continue password failures | `xparse-cli task continue <TASK_ID> --passwords-stdin --out-dir <DIR>` |
+| Continue password failures | `xparse-cli task continue <TASK_ID> --passwords-stdin` |
+| Resume after paid approval | `xparse-cli task resume <TASK_ID> --run-id <RUN_ID> --approve-paid` |
+| Resume after funding | `xparse-cli task resume <TASK_ID> --run-id <RUN_ID> --after-funding` |
 | Start local navigation | `xparse-cli get_doc_info <FILE>` |
 | Show cached outline | `xparse-cli get_outline <DOC_ID>` |
 | Search cached text | `xparse-cli search_text <DOC_ID> <PATTERN>` |

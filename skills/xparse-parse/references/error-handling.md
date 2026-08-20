@@ -1,8 +1,11 @@
 # Structured Error Handling
 
-Every failed CLI command writes one JSON object to stderr. Read
-`error_code`, `retryable`, and `next_action`; do not branch on translated
-message text or an old numeric API code.
+Every failed CLI command writes exactly one final `xparse_error.v1` JSON object
+to stderr. Task commands may write preceding `xparse_event.v1` JSONL progress
+lines to the same stream; parse each line by `schema_version` and use the final
+error object for the decision. Failed commands do not write a success object to
+stdout. Read `error_code`, `retryable`, and `next_action`; do not branch on
+translated message text or an old numeric API code.
 
 ```json
 {
@@ -30,7 +33,7 @@ message text or an old numeric API code.
 | `next_action` | Stable action enum such as `FIX_INPUT`, `REDUCE_FILE`, `REDUCE_PAGES`, `WAIT_AND_RETRY`, `AUTHENTICATE`, `UPGRADE_OR_USE_PAID`, or `CONTACT_SUPPORT`. |
 | `upgrade_url` | Optional purchase/upgrade URL. Showing it does not authorize a paid retry. |
 | `request_id`, `task_id` | Preserve when reporting or escalating a failure. |
-| `details` | Additional diagnostics, including an upstream numeric `api_code` or batch `failures`. Do not use details to override base fields. |
+| `details` | Additional diagnostics, including `operation_id`, an upstream numeric `api_code`, or batch `failures`. Preserve `operation_id` for an idempotent retry; do not use details to override base fields. |
 
 ## Stable codes and decisions
 
@@ -42,6 +45,8 @@ message text or an old numeric API code.
 | `FILE_TOO_LARGE` | Read `actual_value` and the service-sourced `limit`; reduce/split the physical file or ask before an explicit paid retry. `--page-range` does not reduce upload bytes. |
 | `PAGE_LIMIT_EXCEEDED` | Reduce the page selection using the reported limit. |
 | `PAID_QUOTA_REQUIRED` | Stop. Explain current daily/package values and reset time, then wait for explicit paid approval. |
+| `TASK_FREE_MODE_UNAVAILABLE` | Stop. The selected environment has no supported free-first Task billing capability. Do not fall back to serial parse or paid execution. |
+| `IDEMPOTENCY_CONFLICT` | Stop. The operation ID was reused with different inputs or semantics. Keep the original operation intact and use a new ID only for a genuinely new request. |
 | `CAPABILITY_QUERY_FAILED` | Do not invent quota or limits. Retry only when `retryable=true`; otherwise report `request_id`. |
 | `SPLIT_FAILED` | Stop; do not parse an incomplete segment set. Preserve the original file. |
 | `MERGE_FAILED` | Stop; do not present partial output as a complete document. Surface segment/task identifiers. |
@@ -58,11 +63,11 @@ the state rather than repeating `task run`:
 
 | State | Agent decision |
 |-------|----------------|
-| `scheduled`, `running` | Keep the Task ID. Let the default wait finish, or use `task status` later when the original command used `--wait=false` or timed out. |
+| `scheduled`, `running` | Keep Task and Run IDs and use `task status <TASK_ID> --run-id <RUN_ID>` later. Do not recreate the Task or take over the Runtime's internal retries. |
 | `completed` | Use `task read` for selected evidence or `task export` for the full set. |
 | `partial_failed`, `failed` | Run `task debug`; report successful and failed files separately. Do not recreate the whole Task. |
-| `waiting_paid_authorization` | Stop and obtain explicit user approval. Authentication alone is not approval to spend. The current CLI exposes no paid-authorization resume command, so preserve the Task ID and do not invent one. |
-| `waiting_funds` | Stop and tell the user that sufficient funds are required before retrying settlement. |
+| `waiting_paid_authorization` | Stop and obtain explicit user approval. Authentication alone is not approval to spend. After approval, resume the exact Run with `task resume ... --approve-paid`. |
+| `waiting_funds` | Stop and ask the user to add funds. After confirmation, resume the exact Run with `task resume ... --after-funding`. |
 | `cancelled` | Report cancellation. Start a new Task only if the user asks. |
 
 For password failures such as API code `40423`, ask for the password, pass a
@@ -90,7 +95,8 @@ The CLI automatically retries recognized transient parse failures with a
 bounded backoff. Therefore:
 
 - when `retryable=true`, follow `next_action` and retry at most once at the Agent
-  layer;
+  layer; for ambiguous Task submission, reuse the emitted `operation_id` with
+  `--operation-id`;
 - when `error_code=RETRY_EXHAUSTED`, do not immediately retry again;
 - when `retryable=false`, changing only the timing is not a valid recovery;
 - never silently skip a failed parse or failed batch item.
