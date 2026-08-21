@@ -29,7 +29,7 @@ translated message text or an old numeric API code.
 | `message` | Concise user-facing explanation. It can be localized. |
 | `actual_value` | Current file size, page count, required pages, attempts, or another observed value. It is `null` when unavailable. |
 | `limit` | Current service/account capability. Only use a value with `source: service`; never replace it with a remembered constant. It is `null` when the service did not report a limit. |
-| `retryable` | `true` means the same arguments can be retried safely. `false` means fix, wait, authenticate, reduce, or ask first. |
+| `retryable` | `true` means the same logical action can be retried safely once at the Agent layer. `false` means do not retry or try a command variant; follow only `next_action`. |
 | `next_action` | Stable action enum such as `FIX_INPUT`, `REDUCE_FILE`, `REDUCE_PAGES`, `WAIT_AND_RETRY`, `AUTHENTICATE`, `UPGRADE_OR_USE_PAID`, or `CONTACT_SUPPORT`. |
 | `upgrade_url` | Optional purchase/upgrade URL. Showing it does not authorize a paid retry. |
 | `request_id`, `task_id` | Preserve when reporting or escalating a failure. |
@@ -64,11 +64,17 @@ the state rather than repeating `task run`:
 | State | Agent decision |
 |-------|----------------|
 | `scheduled`, `running` | Keep Task and Run IDs and use `task status <TASK_ID> --run-id <RUN_ID>` later. Do not recreate the Task or take over the Runtime's internal retries. |
-| `completed` | Use `task read` for selected evidence or `task export` for the full set. |
+| `completed` | Use `task read` for selected evidence or `task export` for the full set. If result access returns a non-retryable error, report it and stop; never return to `task run`. |
 | `partial_failed`, `failed` | Run `task debug`; report successful and failed files separately. Do not recreate the whole Task. |
 | `waiting_paid_authorization` | Stop and obtain explicit user approval. Authentication alone is not approval to spend. After approval, resume the exact Run with `task resume ... --approve-paid`. |
 | `waiting_funds` | Stop and ask the user to add funds. After confirmation, resume the exact Run with `task resume ... --after-funding`. |
 | `cancelled` | Report cancellation. Start a new Task only if the user asks. |
+
+`waiting_paid_authorization` and `waiting_funds` are action-required state
+projections, not `xparse_error.v1` failures. A successful CLI exit does not mean
+the user request is complete. Follow only `next_action`, make no other xParse
+call before the required human confirmation, and preserve the exact Task/Run
+identity for resume.
 
 For password failures such as API code `40423`, ask for the password, pass a
 JSON map through stdin with `--passwords-stdin`, and run `task continue`. Never
@@ -98,7 +104,17 @@ bounded backoff. Therefore:
   layer; for ambiguous Task submission, reuse the emitted `operation_id` with
   `--operation-id`;
 - when `error_code=RETRY_EXHAUSTED`, do not immediately retry again;
-- when `retryable=false`, changing only the timing is not a valid recovery;
+- when `retryable=false`, stop the logical action and follow only
+  `next_action`; for `CONTACT_SUPPORT`, report the failure and identifiers and
+  execute no further xParse commands for the current request;
+- changing timing, flags, authentication options, selector form, Resource ID,
+  or switching between `task read` and `task export` does not reset the retry
+  budget;
+- after any Task/Run identifier has been observed, result-access failure must
+  not fall back to `task run`, serial `parse`, cached output, or another Run;
+- run each xParse command independently. A pipeline or compound shell command
+  can hide the CLI exit status; the final `xparse_error.v1` still makes the
+  operation a failure even when the wrapper reports exit code 0;
 - never silently skip a failed parse or failed batch item.
 
 ## Reporting template

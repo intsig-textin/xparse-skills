@@ -131,10 +131,14 @@ For field details, see [api-reference.md](api-reference.md).
 
 | Code | Meaning | Next Step |
 |------|---------|-----------|
-| 0 | Success | Parse succeeded, check stdout |
-| 1 | API or network error | Check stderr for details; may retry |
+| 0 | Command completed | For Parse, consume the result. For Task, branch on stdout `status` and `next_action`; waiting states still require human action. |
+| 1 | API or network error | Parse the final `xparse_error.v1`; retry only when `retryable=true` |
 | 2 | Parameter error | Check command syntax; fix and retry |
 | 3 | API returned structured error | See stderr for error code + fix |
+
+Do not rely on the shell exit code alone. Run `xparse-cli` as a standalone
+command without pipelines or trailing commands, and treat a final
+`xparse_error.v1` as failure even if a wrapper reports code 0.
 
 ## Troubleshooting
 

@@ -28,6 +28,11 @@ not report byte-level percentages.
 Rules:
 
 - Preserve `operation_id`, `task_id`, and `run_id` as soon as they appear.
+- Treat accepted Task identity as irreversible. An `operation_id` alone permits
+  only the documented single idempotent submission retry; after `task_id` or
+  `run_id` is observed, do not issue `task run` again for that submission.
+- Keep workflow and billing decisions separate. A waiting or rejected billing
+  route never changes a multi-document Task into individual `parse` calls.
 - Use `--api auto` unless the user explicitly requires the free endpoint or has
   approved paid execution.
 - `auto` and `free` use the Agent free-first Task endpoint and fail closed. An
@@ -61,10 +66,10 @@ Do not put `document.password` in that file. Passwords are resource-specific.
 
 ```bash
 xparse-cli task status <TASK_ID> --run-id <RUN_ID>
-xparse-cli task read <TASK_ID> contract-a.pdf
-xparse-cli task read <TASK_ID> <RESOURCE_ID>
-xparse-cli task export <TASK_ID> --out-dir ./task-output
-xparse-cli task debug <TASK_ID>
+xparse-cli task read <TASK_ID> contract-a.pdf --run-id <RUN_ID>
+xparse-cli task read <TASK_ID> <RESOURCE_ID> --run-id <RUN_ID>
+xparse-cli task export <TASK_ID> --run-id <RUN_ID> --out-dir ./task-output
+xparse-cli task debug <TASK_ID> --run-id <RUN_ID>
 ```
 
 - Prefer `read` when the user's question needs one or a few named documents;
@@ -79,6 +84,14 @@ xparse-cli task debug <TASK_ID>
   continuing an Agent workflow. Omitting it selects the latest Run and is only
   appropriate for an interactive user who explicitly wants the latest state.
 
+If `read` or `export` emits `xparse_error.v1`, apply the main Skill's structured
+error gate before any other command. A non-retryable result-access failure does
+not authorize another selector, omitting `--run-id`, switching between read and
+export, running debug on a completed Run, creating another Task, serial parsing,
+or substituting cached content. Report the exact Task/Run/Resource/request IDs
+and stop. Only a user-confirmed external remediation or explicit new request
+can reopen the action, and it must reuse the preserved Task and Run IDs.
+
 For Agent polling, issue one-shot status checks with bounded backoff: 2, 5, 10,
 20, then 30 seconds. Stop after roughly two minutes in one turn if the Run is
 still `scheduled` or `running`; report the IDs and current status so a later
@@ -89,11 +102,16 @@ turn can continue. Do not hold `task run` open or duplicate the submission.
 | Run state | Next action |
 |-----------|-------------|
 | `scheduled`, `running` | Keep both IDs and check later with `task status <TASK_ID> --run-id <RUN_ID>`; do not create another Task. |
-| `completed` | Read selected results or export all results. |
+| `completed` | Read selected results or export all results. A non-retryable result-access error is terminal for the current request; do not regress to submission. |
 | `partial_failed`, `failed` | Run `task debug`, preserve successful results, and handle each failed resource. |
 | `waiting_paid_authorization` | Stop and ask the user to approve paid execution. Do not infer approval from login state. |
 | `waiting_funds` | Stop and ask the user to add sufficient funds before retrying settlement. |
 | `cancelled` | Report cancellation; do not recreate work without a new request. |
+
+Waiting states are successful Task state projections with an actionable
+`next_action`; they are not completed user work. After observing either waiting
+state, run no additional xParse diagnostics or alternate workflow. Wait for the
+human action, then resume the exact identifiers below.
 
 If an explicit `--wait` times out, keep the returned Task ID and use
 `task status`. Do not start an identical Task merely because the local process
@@ -109,7 +127,8 @@ xparse-cli task resume <TASK_ID> --run-id <RUN_ID> --after-funding
 Use `--approve-paid` only after explicit paid authorization. Use
 `--after-funding` only after the user confirms funds were added. The commands
 are mutually exclusive and resume submission returns without waiting by
-default; poll the same Run ID afterward. Never recreate the Task as paid.
+default; poll the same Run ID afterward. Never recreate the Task as paid, split
+the files into another Task, or process them with serial/parallel `parse` calls.
 
 ## Continue password-protected files
 

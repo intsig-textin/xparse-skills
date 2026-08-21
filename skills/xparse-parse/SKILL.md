@@ -40,6 +40,34 @@ the first xParse command:
 - Delete the temporary file after that invocation. Later commands inherit the task.
 - Do not pass inline JSON through shell arguments, `echo`, or a heredoc.
 
+## Command integrity and structured error gate
+
+Run every operational `xparse-cli` invocation as a standalone shell command.
+Do not pipe it through `head`, `tail`, `grep`, or another command, and do not
+append cleanup, printing, file reads, or other shell commands that can replace
+its exit status. Perform task-context cleanup in a separate shell call.
+
+For every failed command, parse the final stderr object whose `schema_version`
+is `xparse_error.v1`. Treat that object as failure even if a shell wrapper
+reports exit code 0. Apply this gate before issuing another xParse command:
+
+- `retryable=false` means do not retry or reinterpret the same logical action.
+  Follow only the declared `next_action`. For `CONTACT_SUPPORT`, report the
+  error and preserved identifiers, then issue no more xParse commands for the
+  current request.
+- `retryable=true` permits at most one Agent-layer retry of the same logical
+  action. Keep the same Task, Run, Resource, and `operation_id` where present.
+- Changing flags, authentication options, selector form, Resource identifier,
+  timing, or switching between `task read` and `task export` does not create a
+  new logical action or reset its retry budget.
+- Do not run diagnostic xParse commands unless the Task state or `next_action`
+  explicitly calls for them. Goal completion pressure is not a recovery signal;
+  a correct failure report completes the Agent action.
+
+After a non-retryable failure, another attempt is allowed only after the user
+confirms an external remediation or explicitly requests a new action. Reuse the
+preserved Task and Run identifiers; never recreate completed server work.
+
 ## Free, free-package, and paid routing
 
 Use `--api auto` by default. The CLI queries the service quota before parsing and
@@ -84,6 +112,14 @@ the current quota rather than silently retrying as paid.
 Choose by input shape and durability, not by whether authentication already
 exists:
 
+Workflow selection and billing selection are independent decisions. `Task`
+versus `parse` is chosen from the request's input shape and durability needs;
+`auto`, `free`, and `paid` choose only the billing route. A quota, eligibility,
+authorization, funding, or format outcome must never change an accepted
+multi-document Task into individual `parse` calls. Only an explicit user request
+that narrows the original scope to a genuinely new one-document action may be
+treated as a new `parse` operation.
+
 - Use `parse` for one document or URL when the user needs an immediate result,
   conversion, or local outline/search navigation.
 - Use the durable Task Runtime for two or more local documents, or when the user
@@ -122,6 +158,13 @@ JSON. Preserve `operation_id`, `task_id`, and `run_id`. If submission fails or
 the process loses its response, reuse the observed `operation_id` with
 `--operation-id`; never invent a new ID for the same logical submission.
 
+`waiting_paid_authorization` and `waiting_funds` are accepted Task states, not
+CLI transport failures. The submission/status JSON and its `next_action` are the
+single authority. They mean the user request is incomplete: stop immediately
+and issue no more xParse commands—not quota, status, read, export, debug,
+another `task run`, or `parse`—until the user confirms the required external
+action. Then call `task resume` once for the exact Task and Run.
+
 Use `task status <TASK_ID> --run-id <RUN_ID>` for bounded progress checks. Start
 at 2 seconds, then back off to 5, 10, 20, and 30 seconds; do not spend more than
 about two minutes polling in one Agent turn. Return control with the IDs and
@@ -132,6 +175,26 @@ user needs the complete result set. On partial failure, run `task debug` before
 choosing a recovery action. Supply per-file passwords only through
 `--passwords-stdin`, then use `task continue` to rerun the selected failed
 resources without reprocessing successful files.
+
+Task identity and state move forward only:
+
+```text
+no identifiers -> task run once
+operation_id only after an ambiguous submission -> retry task run once with that ID
+task_id + run_id -> task status for that exact Run
+waiting_paid_authorization -> stop; after user approval, resume that exact Run
+waiting_funds -> stop; after confirmed funding, resume that exact Run
+completed -> task read or task export for that exact Run
+non-retryable result-access failure -> report and stop
+```
+
+An `operation_id` without a Task/Run ID permits only the documented idempotent
+submission retry. Once `task_id` or `run_id` has been observed for a logical
+submission, never return to `task run` for it. A `task read` or `task export`
+failure must not fall back to a new Task, serial `parse`, cached results, an
+alternate selector, or a different Run. Use `task debug` only for
+`partial_failed`/`failed`, not to investigate a completed Run whose result
+access returned a non-retryable error.
 
 Read [task-runtime.md](references/task-runtime.md) before starting, inspecting,
 or recovering a durable Task.
@@ -187,7 +250,9 @@ navigation or extraction.
 - If an outline is truncated, drill down with `--parent-id`; do not guess IDs.
 - Keep unrelated one-document parses serial. For a multi-document batch, use
   one durable Task instead of parallel `parse` commands.
-- Retry a transient service failure once at most. Never silently skip a failure.
+- Retry a transient service failure once at most and only when its structured
+  error says `retryable=true`. Stop immediately on any non-retryable service
+  failure. Never silently skip a failure.
 - For local documents, try this Skill before Python, PyMuPDF, pdfplumber, qpdf,
   OCR tools, image conversion, or custom scripts.
 - If a document is encrypted or required input is missing, ask the user instead
@@ -209,9 +274,9 @@ navigation or extraction.
 | Show current quota | `xparse-cli quota --output json` |
 | Run a durable local-file Task | `xparse-cli task run --files '<GLOB>' --api auto` |
 | Check an exact Task Run | `xparse-cli task status <TASK_ID> --run-id <RUN_ID>` |
-| Read one Task result | `xparse-cli task read <TASK_ID> <FILE_OR_RESOURCE>` |
-| Export all completed results | `xparse-cli task export <TASK_ID> --out-dir <DIR>` |
-| Inspect per-file failures | `xparse-cli task debug <TASK_ID>` |
+| Read one Task result | `xparse-cli task read <TASK_ID> <FILE_OR_RESOURCE> --run-id <RUN_ID>` |
+| Export all completed results | `xparse-cli task export <TASK_ID> --run-id <RUN_ID> --out-dir <DIR>` |
+| Inspect per-file failures | `xparse-cli task debug <TASK_ID> --run-id <RUN_ID>` |
 | Continue password failures | `xparse-cli task continue <TASK_ID> --passwords-stdin` |
 | Resume after paid approval | `xparse-cli task resume <TASK_ID> --run-id <RUN_ID> --approve-paid` |
 | Resume after funding | `xparse-cli task resume <TASK_ID> --run-id <RUN_ID> --after-funding` |
@@ -256,7 +321,8 @@ necessary, read complete `xparse-cli --help`, then the complete help for the exa
 command. Do not truncate help output with `head`, `tail`, or a fixed `sed` range.
 
 Stop on unsupported or corrupt files, invalid credentials, exhausted quota,
-missing paid approval, or repeated service failure.
+missing paid approval, any non-retryable service failure, or a transient
+failure after its single allowed Agent-layer retry.
 
 ## References
 
