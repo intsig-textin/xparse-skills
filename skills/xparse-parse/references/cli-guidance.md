@@ -73,6 +73,9 @@ xparse-cli parse document.pdf --api auto --view json
 xparse-cli parse document.pdf --api auto --output ./result/
 ```
 
+The CLI creates the output directory when it does not exist. If creation or
+writing fails, inspect the structured `OUTPUT_FAILED` diagnostics.
+
 ## Common Scenarios
 
 | Scenario | Command |

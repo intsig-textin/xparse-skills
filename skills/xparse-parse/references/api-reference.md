@@ -252,7 +252,6 @@ This section groups error codes by handling intent. It is meant for CLI and skil
 
 | Code | Meaning | Action |
 |------|---------|--------|
-| 40422 | Password required | Rerun with `--password <PWD>` |
 | 40423 | Password incorrect | Retry with the correct password |
 
 #### Processing & Service Errors
@@ -260,6 +259,7 @@ This section groups error codes by handling intent. It is meant for CLI and skil
 | Code | Meaning | Action |
 |------|---------|--------|
 | 30203 | Base service fault | Retry after a short delay |
+| 40422 | Service-defined file processing failure; the direct reason is in `message` | Keep `SERVICE_ERROR`, show `message`, follow `PROVIDE_FILE`, and preserve `request_id` |
 | 500 | Internal server error | Retry; contact support if persistent |
 | 50207 | Partial parse failure | Check `success_count` and inspect partial output |
 

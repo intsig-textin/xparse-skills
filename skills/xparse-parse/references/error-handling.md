@@ -23,7 +23,7 @@ message text or an old numeric API code.
 | Field | Agent rule |
 |-------|------------|
 | `error_code` | Stable decision key. Prefer it over `message` or `details.api_code`. |
-| `message` | Concise user-facing explanation. It can be localized. |
+| `message` | Direct user-facing explanation. Show it to the user, but never parse it for branching because it can be localized. |
 | `actual_value` | Current file size, page count, required pages, attempts, or another observed value. It is `null` when unavailable. |
 | `limit` | Current service/account capability. Only use a value with `source: service`; never replace it with a remembered constant. It is `null` when the service did not report a limit. |
 | `retryable` | `true` means the same arguments can be retried safely. `false` means fix, wait, authenticate, reduce, or ask first. |
@@ -43,11 +43,13 @@ message text or an old numeric API code.
 | `PAGE_LIMIT_EXCEEDED` | Reduce the page selection using the reported limit. |
 | `PAID_QUOTA_REQUIRED` | Stop. Explain current daily/package values and reset time, then wait for explicit paid approval. |
 | `CAPABILITY_QUERY_FAILED` | Do not invent quota or limits. Retry only when `retryable=true`; otherwise report `request_id`. |
+| `OUTPUT_FAILED` | Inspect `details.failure_stage` and `details.reason_code`, then fix the output path or permissions before retrying. |
 | `SPLIT_FAILED` | Stop; do not parse an incomplete segment set. Preserve the original file. |
-| `MERGE_FAILED` | Stop; do not present partial output as a complete document. Surface segment/task identifiers. |
-| `RETRY_EXHAUSTED` | The CLI already used its bounded retry budget. Do not immediately repeat the same command. Follow `next_action` and preserve `request_id`. |
-| `RATE_LIMITED` / `NETWORK_ERROR` / `SERVICE_ERROR` | Retry only when `retryable=true`; respect `WAIT_AND_RETRY`. |
-| `AUTHENTICATION_FAILED` / `OAUTH_FAILED` | In WorkBuddy, ask the user to reconnect the Connector. Never request or print tokens. |
+| `MERGE_FAILED` | Stop; do not present partial output as a complete document. Surface `failure_stage`, `reason_code`, segment index/field, and request/task identifiers when present. |
+| `RETRY_EXHAUSTED` | The CLI already used its bounded retry budget. Do not immediately repeat the same command. Inspect `details.last_error`, follow `next_action`, and preserve `request_id`. |
+| `RATE_LIMITED` / `NETWORK_ERROR` | Retry only when `retryable=true`; respect `WAIT_AND_RETRY`. |
+| `SERVICE_ERROR` | Show the original `message`, then follow `retryable` and `next_action`. When `details.api_code=40422`, keep `SERVICE_ERROR`, preserve `request_id`, and follow `PROVIDE_FILE`; do not infer or rename a subtype from message text. |
+| `AUTHENTICATION_FAILED` | In WorkBuddy, ask the user to reconnect the Connector. Never request or print tokens. |
 | `INVALID_ARGUMENT`, `INVALID_PAGE_RANGE`, `INVALID_PASSWORD` | Correct the input, then run once with the corrected arguments. |
 | `BATCH_PARTIAL_FAILURE` | Inspect every `details.failures[]` item. Never hide failed inputs or claim the batch fully succeeded. |
 

@@ -89,8 +89,8 @@ Use one parse command:
 xparse-cli parse <INPUT> --api auto
 ```
 
-For PDFs, always pass an existing output directory so long Markdown is not
-truncated in terminal output:
+For PDFs, pass an output directory so long Markdown is not truncated in
+terminal output. The CLI creates the directory when it does not exist:
 
 ```bash
 xparse-cli parse report.pdf --api auto --output <DIR>
@@ -155,8 +155,8 @@ navigation or extraction.
 | Show cached outline | `xparse-cli get_outline <DOC_ID>` |
 | Search cached text | `xparse-cli search_text <DOC_ID> <PATTERN>` |
 
-`--output` accepts an existing directory, not an output filename. The CLI writes
-`<basename>.md` or `<basename>.json` inside it.
+`--output` accepts a directory, not an output filename. The CLI creates a missing
+directory and writes `<basename>.md` or `<basename>.json` inside it.
 
 ## Authentication boundary
 
