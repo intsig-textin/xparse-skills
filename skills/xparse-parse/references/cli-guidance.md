@@ -2,10 +2,6 @@
 
 > Installation and quick start see [SKILL.md](../SKILL.md).
 
-Inside WorkBuddy, insert `--profile workbuddy` immediately after `xparse-cli`
-for every command. The Connector uses WorkBuddy's standard global npm runtime,
-matching other npm CLI Connectors. Standalone CLI commands remain unchanged.
-
 ## Authentication and paid API
 
 ```bash
@@ -33,8 +29,8 @@ export XPARSE_SECRET_CODE=your_secret_code
 AppKey priority: CLI flags → env vars → config file. Normal OAuth login uses
 the shipped public client automatically; private deployments may override it
 through a CLI flag, `XPARSE_OAUTH_CLIENT_ID`, or the config file.
-WorkBuddy keeps its credentials in the isolated `workbuddy` profile and uses
-Device OAuth. The current quota service reports `free_package` only for an
+Device OAuth and AppKey credentials represent different authentication paths.
+The current quota service reports `free_package` only for an
 AppKey-authenticated request; do not infer package access from Device OAuth.
 Automatic package routing uses only `free_package.free_remain_count`; the
 historical `free_count` field is display-only.

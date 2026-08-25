@@ -5,40 +5,6 @@ legacy AppKey workflow. In an interactive terminal, bare `xparse-cli auth`
 opens a menu for OAuth, AppKey, status, and logout. With piped/non-terminal
 input it keeps the legacy AppKey prompt contract.
 
-## WorkBuddy
-
-WorkBuddy v5 uses the Connector's native Device Code Flow:
-
-```bash
-xparse-cli --profile workbuddy auth device --open-browser=always --output=jsonl
-```
-
-The CLI opens `verification_uri_complete` automatically when a desktop browser
-is available. WorkBuddy also extracts `verification_uri_complete` and
-`user_code`, presents its Device Code Modal as a fallback, and leaves the CLI
-process running while the CLI polls the token endpoint. The CLI saves
-credentials only after authorization succeeds.
-
-The `workbuddy` profile stores credentials under
-`~/.xparse-cli/profiles/workbuddy/`. Login and logout in WorkBuddy therefore do
-not affect standalone credentials directly under `~/.xparse-cli`.
-
-WorkBuddy task shells do not inherit Connector lifecycle environment variables.
-Every CLI command issued by the installed Skill must therefore include
-`--profile workbuddy`. This profile also marks API requests with
-`X-From: workbuddy`.
-
-The Skill must not:
-
-- request, store, or repeat an Access Token, Refresh Token, Secret Code, or
-  private `device_code`;
-- implement its own callback listener, token polling, or HTTP client;
-- start browser PKCE as an automatic fallback from Device OAuth;
-- open a separate browser PKCE flow while Device OAuth is in progress.
-
-If Connector status is disconnected, ask the user to reconnect it in
-WorkBuddy. Do not collect AppKey credentials in the conversation.
-
 ## Standalone Device OAuth
 
 Use this in terminals and on servers without a callback listener. Inside the

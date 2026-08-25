@@ -62,7 +62,7 @@ failed and only to select the existing-Resource `task continue` recovery path.
 | `RETRY_EXHAUSTED` | The CLI already used its bounded retry budget. Do not immediately repeat the same command. Inspect `details.last_error`, follow `next_action`, and preserve `request_id`. |
 | `RATE_LIMITED` / `NETWORK_ERROR` | Retry only when `retryable=true`; respect `WAIT_AND_RETRY`. |
 | `SERVICE_ERROR` | Show the original `message`, then follow `retryable` and `next_action`. When `details.api_code=40422`, keep `SERVICE_ERROR`, preserve `request_id`, and follow `PROVIDE_FILE`; do not infer or rename a subtype from message text. |
-| `AUTHENTICATION_FAILED` | In WorkBuddy, ask the user to reconnect the Connector. Never request or print tokens. |
+| `AUTHENTICATION_FAILED` | Ask the user to restore the configured authentication method. Never request or print tokens. |
 | `INVALID_ARGUMENT`, `INVALID_PAGE_RANGE`, `INVALID_PASSWORD` | Correct the input, then run once with the corrected arguments. |
 | `BATCH_PARTIAL_FAILURE` | Inspect every `details.failures[]` item. Never hide failed inputs or claim the batch fully succeeded. |
 
@@ -71,8 +71,8 @@ failed and only to select the existing-Resource `task continue` recovery path.
 Task commands return a persistent `task_id` and the latest Run state. Branch on
 the state rather than repeating `task run`:
 
-In WorkBuddy, `run_accepted` is a success progress event that exposes the
-durable identity before foreground polling finishes. An explicit `--wait`
+When structured progress is enabled, `run_accepted` is a success event that
+exposes the durable identity before foreground polling finishes. An explicit `--wait`
 timeout is also a successful submission projection (`wait_timed_out: true`,
 `next_action: POLL_STATUS`), not `SERVICE_ERROR`; poll the same Run. A genuine
 polling API failure remains `xparse_error.v1` and includes the accepted

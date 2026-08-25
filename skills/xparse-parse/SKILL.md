@@ -9,22 +9,10 @@ Use the installed `xparse-cli` as the only parsing, authentication, quota, and
 document-navigation execution kernel. Do not reproduce its HTTP, OAuth, quota,
 PDF splitting, or result-merging logic in the Skill.
 
-## WorkBuddy profile and task context
+## Task context
 
-Inside the TextIn xParse WorkBuddy Connector, prefix every invocation with:
-
-```bash
-xparse-cli --profile workbuddy <command> ...
-```
-
-The Connector declares a Node.js runtime and installs the pinned CLI with the
-standard global npm prefix, so WorkBuddy supplies `xparse-cli` on PATH. On
-Windows Connector lifecycle commands use `xparse-cli.cmd`; document-task shell
-commands may use the command form supported by the active shell. Outside
-WorkBuddy, use `xparse-cli <command> ...`.
-
-For every new WorkBuddy user request, create one private `0600` JSON file before
-the first xParse command:
+For every new user request, create one private `0600` JSON file before the
+first xParse command:
 
 ```json
 {
@@ -97,7 +85,7 @@ its own quota preflight, and the parse response remains authoritative if quota
 changes between inspection and execution. The Skill must not promise stronger
 billing guarantees than the existing server provides.
 
-WorkBuddy Device OAuth and AppKey are different identities. If quota returns
+Device OAuth and AppKey are different identities. If quota returns
 `authenticated=false` or omits `free_package`, do not infer package access from
 an OAuth login indicator. Treat only fields in the current quota response as
 available.
@@ -141,20 +129,15 @@ For local files, start one server-persisted Task instead of launching multiple
 xparse-cli task run --files '<GLOB>' --api auto
 ```
 
-Inside WorkBuddy, apply the required prefix:
-
-```bash
-xparse-cli --profile workbuddy task run --files '<GLOB>' --api auto
-```
-
 `--api auto` is free-first and fails closed: it does not silently create a paid
 Task. Use `--api paid` only after the user explicitly approves paid service
 behavior. Do not parallelize individual `parse` commands for inputs that belong
 to one Task.
 
-`task run` returns after the server accepts the Run. In WorkBuddy, stderr is an
-`xparse_event.v1` JSONL stream: `run_accepted` exposes the accepted Task/Run
-identity immediately, and `run_status` is emitted only when the state changes.
+`task run` returns after the server accepts the Run. When structured progress
+is enabled, stderr is an `xparse_event.v1` JSONL stream: `run_accepted` exposes
+the accepted Task/Run identity immediately, and `run_status` is emitted only
+when the state changes.
 Stdout contains exactly one final submission JSON. Preserve `operation_id`,
 `task_id`, and `run_id`. If submission fails or
 the process loses its response, reuse the observed `operation_id` with
@@ -311,10 +294,7 @@ directory and writes `<basename>.md` or `<basename>.json` inside it.
 
 ## Authentication boundary
 
-- In WorkBuddy, rely on Connector Device OAuth and the isolated `workbuddy`
-  profile. If disconnected, ask the user to reconnect the Connector; never ask
-  for or echo a Secret, Token, or device code.
-- Standalone CLI supports AppKey, Device OAuth, and browser PKCE as documented in
+- The CLI supports AppKey, Device OAuth, and browser PKCE as documented in
   [authentication.md](references/authentication.md).
 - Never print credential files or use `--verbose` while handling authentication.
 - An explicitly selected authentication method must fail as that method; do not
@@ -335,9 +315,6 @@ For users in China, use the npmmirror registry:
 npm i -g xparse-cli --registry=https://registry.npmmirror.com
 ```
 
-The WorkBuddy Connector installs its pinned CLI version automatically. Do not
-replace the Connector-managed version from within a document task.
-
 Use this Skill and its references as the command index. When live discovery is
 necessary, read complete `xparse-cli --help`, then the complete help for the exact
 command. Do not truncate help output with `head`, `tail`, or a fixed `sed` range.
@@ -350,7 +327,7 @@ failure after its single allowed Agent-layer retry.
 
 - [navigation.md](references/navigation.md): targeted outline, search, page, and content workflow.
 - [task-runtime.md](references/task-runtime.md): durable multi-file routing, states, result access, and recovery.
-- [authentication.md](references/authentication.md): WorkBuddy and standalone authentication.
+- [authentication.md](references/authentication.md): AppKey, Device OAuth, and browser authentication.
 - [cli-guidance.md](references/cli-guidance.md): modes, output, parameters, and limits.
 - [api-reference.md](references/api-reference.md): response fields and service error codes.
 - [error-handling.md](references/error-handling.md): retry, stop, and paid-approval decisions.

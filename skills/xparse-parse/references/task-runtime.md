@@ -5,9 +5,6 @@ for a persistent Task that can be inspected or resumed later. Its control-plane
 routes and OAuth authentication are available in domestic and overseas
 environments. URLs remain on the single-document `parse` path.
 
-Inside WorkBuddy, prefix every example with `xparse-cli --profile workbuddy`.
-The examples below omit that prefix only for readability.
-
 ## Start one Task
 
 Use explicit file arguments or a quoted glob. The CLI expands globs
@@ -20,8 +17,9 @@ xparse-cli task run a.pdf b.pdf --api auto
 xparse-cli task run --files 'contracts/*.pdf' --api auto
 ```
 
-In WorkBuddy, stderr contains line-delimited `xparse_event.v1` progress events
-and stdout contains one final `xparse_task_submission.v1` JSON object. The
+With structured progress enabled, stderr contains line-delimited
+`xparse_event.v1` progress events and stdout contains one final
+`xparse_task_submission.v1` JSON object. The
 `run_accepted` event exposes `task_id`, `run_id`, initial status, and next action
 as soon as the server accepts the Run. During explicit waiting, `run_status` is
 emitted only when status changes. Upload progress is intentionally coarse
@@ -215,7 +213,7 @@ Do not use `continue` for `PASSWORD_INPUT_REQUIRED` emitted while `task run` or
 `task rerun --mode new-files` is still uploading. Replay that originating
 command with the same `operation_id` instead.
 
-## WorkBuddy task context
+## Task context
 
 The private `xparse_task_context.v1` file described in the main Skill applies to
 Task Runtime too. Add `--task-context <FILE>` only to the first xParse invocation

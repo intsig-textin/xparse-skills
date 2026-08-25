@@ -7,6 +7,16 @@ SKILL_ROOT = ROOT / "skills" / "xparse-parse"
 
 
 class XParseParseSkillContractTest(unittest.TestCase):
+    def test_runtime_skill_is_platform_neutral(self):
+        contract = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(SKILL_ROOT.rglob("*"))
+            if path.is_file() and path.suffix in {".md", ".yaml", ".yml"}
+        ).lower()
+
+        for platform_token in ("workbuddy", "easyclaw", "x-from: workbuddy"):
+            self.assertNotIn(platform_token, contract)
+
     def test_output_directory_is_created_when_missing(self):
         skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
         guidance = (SKILL_ROOT / "references" / "cli-guidance.md").read_text(

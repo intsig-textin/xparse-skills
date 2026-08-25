@@ -1,7 +1,7 @@
 # TextIn AppKey Setup
 
-This page covers the legacy standalone AppKey flow. For Device OAuth, browser
-PKCE, and WorkBuddy login, use [authentication.md](authentication.md).
+This page covers the legacy standalone AppKey flow. For Device OAuth and browser
+PKCE, use [authentication.md](authentication.md).
 
 ## When to Configure
 
@@ -28,8 +28,8 @@ xparse-cli auth app-key
 
 Follow the prompts to enter your `APP_ID` and `SECRET_CODE` from the TextIn
 Console associated with the current region and account. Credentials are saved
-to `~/.xparse-cli/config.yaml`. Do not use this flow to collect credentials
-inside WorkBuddy; reconnect the Connector instead.
+to `~/.xparse-cli/config.yaml`. Do not collect credentials in the conversation;
+the user must enter them directly in the local CLI prompt.
 
 Bare `xparse-cli auth` also exposes this option from its terminal menu. For
 scripts and piped input, bare `auth` preserves the previous direct AppKey
