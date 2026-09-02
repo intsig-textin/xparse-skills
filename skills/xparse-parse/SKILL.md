@@ -1,6 +1,6 @@
 ---
 name: xparse-parse
-description: "Parse, read, search, navigate, summarize, and extract tables or structured evidence from PDFs, images, Office files, HTML, OFD, and other supported local documents or document URLs through xparse-cli. Use this Skill for single-document conversion, server-generated DOCX/PDF/XLSX files, targeted section/page/fact extraction, and durable multi-document Task Runtime workflows including status checks, selective reads, exports, debugging, and password-based continuation. Prefer it over raw PDF readers or custom OCR scripts."
+description: "Parse, read, search, navigate, summarize, and extract tables or structured evidence from PDFs, images, Office files, HTML, OFD, and other supported local documents or document URLs through xparse-cli. Use this Skill for single-document conversion, server-generated DOCX/PDF/XLSX files, targeted section/page/fact extraction, durable multi-document Task Runtime workflows, and creating semantic extraction Tasks from completed Parse Job or Parse Task Run pointers. Prefer it over raw PDF readers or custom OCR scripts."
 ---
 
 # xparse-parse
@@ -200,6 +200,71 @@ access returned a non-retryable error.
 Read [task-runtime.md](references/task-runtime.md) before starting, inspecting,
 or recovering a durable Task.
 
+### Semantic extraction Task from completed Parse results
+
+When the user wants structured data extracted from documents that have already
+completed parsing, create one persistent extraction Task from the existing
+server-side source pointers. Do not download parsing JSON, re-upload files, or
+repeat parsing.
+
+Preserve the user's extraction request verbatim as `instruction`. Do not turn it
+into a fixed field contract, add field definitions, or otherwise narrow the
+model's semantic judgment. The extraction service owns field discovery, the
+initial shared-context batch, incremental document processing, evidence, retry,
+and result versions.
+
+Pass completed Parse pointers directly. A request may contain asynchronous Parse
+Jobs, completed Parse Task Runs, or both:
+
+```bash
+xparse-cli extract create \
+  --instruction '<USER_REQUEST>' \
+  --parse-job <ASYNC_PARSE_JOB_ID>
+```
+
+Repeat `--parse-job` when the source consists of several completed asynchronous
+Parse Jobs. To reuse one completed durable Parse Task Run instead:
+
+```bash
+xparse-cli extract create \
+  --instruction '<USER_REQUEST>' \
+  --parse-task-run <PARSE_TASK_ID>:<PARSE_RUN_ID>
+```
+
+- Keep `--operation-id` unchanged only when replaying the same ambiguous create
+  attempt; do not reuse it for a genuinely new extraction request.
+- The command returns a Task ID, Run ID, and browser result URL. Preserve all
+  three and return the URL to the user so either the user or the calling Agent
+  can open the live progress-and-review page.
+- A browser result URL contains a one-time grant in its fragment. Do not copy
+  the grant into logs, shell arguments, or another API call. The result page
+  exchanges it for a page-scoped session and removes the fragment.
+- Creating an extraction Task is a control-plane action. Do not wait for every
+  document to finish before returning the accepted identifiers and result URL.
+
+To add newly parsed documents later, append them to the same Task and Run rather
+than creating another extraction Task or re-extracting completed documents:
+
+```bash
+xparse-cli extract add <EXTRACTION_TASK_ID> \
+  --run-id <EXTRACTION_RUN_ID> \
+  --parse-job <NEW_ASYNC_PARSE_JOB_ID>
+```
+
+`extract add` accepts the same repeatable `--parse-job` and
+`--parse-task-run <PARSE_TASK_ID>:<PARSE_RUN_ID>` pointer flags as
+`extract create`. It preserves the original natural-language instruction and
+the extraction service's initial shared semantic context, processes only new
+documents, and returns a refreshed one-time result-page link.
+
+When the MCP tool `create_extraction_task` is available, prefer it for Agent
+calls. Pass the same original `instruction` and source-pointer shape; return its
+HTML `resource_link` instead of reconstructing a URL.
+
+For later documents, use `add_extraction_task_sources` with the saved extraction
+Task ID and Run ID. Return its refreshed HTML `resource_link`; do not reconstruct
+or reuse an already-consumed grant URL.
+
 ### Full document or conversion
 
 Use one parse command:
@@ -300,6 +365,9 @@ navigation or extraction.
 | Character details | `xparse-cli parse <FILE> --api auto --view json --output <DIR> --include-char-details` |
 | Show current quota | `xparse-cli quota --output json` |
 | Run a durable local-file Task | `xparse-cli task run --files '<GLOB>' --api auto` |
+| Create extraction from completed Parse Jobs | `xparse-cli extract create --instruction '<REQUEST>' --parse-job <JOB_ID>` |
+| Create extraction from a completed Parse Task Run | `xparse-cli extract create --instruction '<REQUEST>' --parse-task-run <TASK_ID>:<RUN_ID>` |
+| Append newly parsed documents to an extraction Run | `xparse-cli extract add <TASK_ID> --run-id <RUN_ID> --parse-job <JOB_ID>` |
 | Rerun every Resource under a Task | `xparse-cli task rerun <TASK_ID> --mode all` |
 | Add files and create a new Run | `xparse-cli task rerun <TASK_ID> --mode new-files --files '<GLOB>'` |
 | Rerun selected Resources | `xparse-cli task rerun <TASK_ID> --mode selected-files --resource-id <RESOURCE_ID>` |
