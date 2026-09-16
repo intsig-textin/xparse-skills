@@ -289,6 +289,12 @@ action before polling resumes.
   When `needs_user_action=true`, stop polling and direct the user to the existing
   result page; use `task status <TASK_ID> --details` only when the documented
   recovery path requires it. Opening a page does not replace querying status.
+- Summary counts are document counts. A failed document has one document-level
+  issue with `error_code` and `error_message` when available; report that cause,
+  not a second missing-field error. For `insufficient_balance`, explain that
+  funds or package quota must be restored before retrying on the existing Task.
+  A completed field that was not found is a normal `null` result, not an issue.
+  Result pagination applies to `items`; `summary` still covers the whole Task.
 - Keep the default asynchronous submission and bounded status polling. When the
   user explicitly requests foreground waiting, extraction creation and `task add`
   accept `--wait`, with optional positive `--timeout` and `--poll-interval` durations.
