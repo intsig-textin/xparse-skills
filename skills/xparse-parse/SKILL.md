@@ -1,6 +1,6 @@
 ---
 name: xparse-parse
-description: "Parse, read, search, navigate, summarize, and extract tables or structured evidence from PDFs, images, Office files, HTML, OFD, and other supported local documents or document URLs through xparse-cli. Use this Skill for single-document conversion, server-generated DOCX/PDF/XLSX files, targeted section/page/fact extraction, durable multi-document Task Runtime workflows, and creating semantic extraction Tasks from completed Parse Job or Parse Task Run pointers. Prefer it over raw PDF readers or custom OCR scripts."
+description: "Parse, read, search, navigate, summarize, and extract tables or structured evidence from PDFs, images, Office files, HTML, OFD, and other supported local documents or document URLs through xparse-cli. Use this Skill for single-document conversion, server-generated DOCX/PDF/XLSX files, targeted section/page/fact extraction, durable multi-document Task Runtime workflows, and semantic extraction Tasks created from parsed File Asset IDs. Prefer it over raw PDF readers or custom OCR scripts."
 ---
 
 # xparse-parse
@@ -110,6 +110,10 @@ treated as a new `parse` operation.
 
 - Use `parse` for one document or URL when the user needs an immediate result,
   conversion, or local outline/search navigation.
+- Structured extraction is the exception: for any number of local files, use
+  the first full Run of a new durable Parse Task and then create the extraction
+  Task from that Run's complete File Asset set. Follow the semantic extraction
+  section below instead of reading parsed content into the Host.
 - Use the durable Task Runtime for two or more local documents, or when the user
   explicitly needs a persistent Task ID, later status checks, selective result
   reads, exports, debugging, or continuation. A one-file request can therefore
@@ -200,70 +204,134 @@ access returned a non-retryable error.
 Read [task-runtime.md](references/task-runtime.md) before starting, inspecting,
 or recovering a durable Task.
 
-### Semantic extraction Task from completed Parse results
+### Semantic extraction Task from parsed File Assets
 
-When the user wants structured data extracted from documents that have already
-completed parsing, create one persistent extraction Task from the existing
-server-side source pointers. Do not download parsing JSON, re-upload files, or
-repeat parsing.
+When the user asks to extract structured data, create one persistent extraction
+Task on the service. Do not read Parse results into the Host and do not generate
+the final field values locally. Preserve the user's extraction request verbatim
+as `instruction`; do not replace it with a fixed schema or add field definitions.
 
-Preserve the user's extraction request verbatim as `instruction`. Do not turn it
-into a fixed field contract, add field definitions, or otherwise narrow the
-model's semantic judgment. The extraction service owns field discovery, the
-initial shared-context batch, incremental document processing, evidence, retry,
-and result versions.
-
-Pass completed Parse pointers directly. A request may contain asynchronous Parse
-Jobs, completed Parse Task Runs, or both:
+If the request already supplies trustworthy File Asset IDs from xParse, create
+the extraction Task directly. Repeat `--file-id` in source order:
 
 ```bash
-xparse-cli extract create \
+xparse-cli task run --task-type extract \
   --instruction '<USER_REQUEST>' \
-  --parse-job <ASYNC_PARSE_JOB_ID>
+  --file-id <FILE_ASSET_ID>
 ```
 
-Repeat `--parse-job` when the source consists of several completed asynchronous
-Parse Jobs. To reuse one completed durable Parse Task Run instead:
+For local files, including a single file, first create a new durable Parse Task
+and preserve its accepted `task_id` and first `run_id`:
 
 ```bash
-xparse-cli extract create \
-  --instruction '<USER_REQUEST>' \
-  --parse-task-run <PARSE_TASK_ID>:<PARSE_RUN_ID>
+xparse-cli task run <FILE> --api auto
 ```
 
-- Keep `--operation-id` unchanged only when replaying the same ambiguous create
-  attempt; do not reuse it for a genuinely new extraction request.
-- The command returns a Task ID, Run ID, and browser result URL. Preserve all
-  three and return the URL to the user so either the user or the calling Agent
-  can open the live progress-and-review page.
-- A browser result URL contains a one-time grant in its fragment. Do not copy
-  the grant into logs, shell arguments, or another API call. The result page
-  exchanges it for a page-scoped session and removes the fragment.
-- Creating an extraction Task is a control-plane action. Do not wait for every
-  document to finish before returning the accepted identifiers and result URL.
+Use one `task run` for all local source files. Poll only that exact first Run
+with `task status <TASK_ID> --run-id <FIRST_RUN_ID>` using the bounded backoff
+defined above. Do not use an old Task, a rerun, or a continuation Run as an
+implicit extraction source. If the first Run remains `scheduled` or `running`
+after the polling budget, return its identifiers and current state instead of
+creating the extraction Task.
 
-To add newly parsed documents later, append them to the same Task and Run rather
-than creating another extraction Task or re-extracting completed documents:
+When the exact first Run reports `completed`, fetch the stable Task resources:
 
 ```bash
-xparse-cli extract add <EXTRACTION_TASK_ID> \
-  --run-id <EXTRACTION_RUN_ID> \
-  --parse-job <NEW_ASYNC_PARSE_JOB_ID>
+xparse-cli task status <TASK_ID> --details
 ```
 
-`extract add` accepts the same repeatable `--parse-job` and
-`--parse-task-run <PARSE_TASK_ID>:<PARSE_RUN_ID>` pointer flags as
-`extract create`. It preserves the original natural-language instruction and
-the extraction service's initial shared semantic context, processes only new
-documents, and returns a refreshed one-time result-page link.
+Create the extraction Task only when all of these invariants hold in the details
+response:
 
-When the MCP tool `create_extraction_task` is available, prefer it for Agent
-calls. Pass the same original `instruction` and source-pointer shape; return its
-HTML `resource_link` instead of reconstructing a URL.
+- `run.run_id` equals `<FIRST_RUN_ID>` and `run.status` is `completed`;
+- `run.failed_count` is `0`;
+- `run.completed_count` equals `run.total_count`;
+- `run.total_count` equals the number of `resources`;
+- every resource has a non-empty `file_id`.
 
-For later documents, use `add_extraction_task_sources` with the saved extraction
-Task ID and Run ID. Return its refreshed HTML `resource_link`; do not reconstruct
-or reuse an already-consumed grant URL.
+Pass every `resources[].file_id`, in resource order, as a repeated `--file-id`.
+Do not call `task export`, `task read`, or another content-returning command to
+recover File Asset IDs. `partial_failed` and `failed` must stop before extraction.
+Waiting states retain the same Task and first Run and require the documented user
+action before polling resumes.
+
+- Keep `--operation-id` unchanged only when replaying the same ambiguous
+  extraction create attempt; do not reuse it for a new extraction request.
+- The command returns `task_id`, `status`, and `result_page_url`. Use `task status <TASK_ID>` to inspect progress; do not guess an extraction Run ID.
+- The result URL contains a short-lived grant in its fragment. Preserve the URL
+  exactly as returned. Do not reconstruct it, persist it, print the grant, or
+  send it to another API. Ask a capable Host to open the URL directly; if the
+  Host cannot, return it as a clickable link.
+- Creating the extraction Task submits asynchronous work. Open or return the result
+  page when useful, and use `task status <TASK_ID>` for progress. Apply the bounded
+  polling backoff above; stop polling when user action is needed or the budget expires.
+- To read pure results use `task result <TASK_ID> --limit 50`. Follow `next_offset`
+  with `--offset <NEXT_OFFSET> --snapshot <SNAPSHOT>`; on snapshot conflict restart
+  from the first page rather than combining different task versions.
+- To export use `task export <TASK_ID> --format json --output <DIRECTORY>` (or csv).
+  Extraction writes `results.json` or `results.csv`; stdout contains the completion
+  summary and output path. Only ready documents are exported; always report omissions
+  and review warnings from the summary. Never claim partial results are complete.
+- JSON contains `file_name` and business `result` values without evidence or agent
+  internals. Missing values are null, identifiers remain strings, and object/array
+  values remain structured. CSV serializes object/array cells as JSON text.
+- Do not pass parse-only flags (`--api`, `--config`, `--password`, `--wait`, or
+  automatic `--output`) to extraction creation. `task run` defaults to parse for
+  compatibility; extraction requires explicit `--task-type extract`.
+- `task add <TASK_ID>` uses the server's task type: pass local paths for parse,
+  parsed `--file-id` values for extract. Parse add requests a new-files Run and
+  retains `--operation-id` recovery; a failure after binding does not mean files
+  were not added. Preserve identifiers and follow the returned recovery instructions.
+  Existing `task rerun --mode new-files` remains supported.
+
+#### Extraction billing and recovery
+
+- Extraction uses its own 100 free pages per user per day, then normal billing.
+  Parse allowance is not the extraction allowance. The server checks the whole
+  file against remaining free pages plus paid funds; insufficient funds reject
+  the file, without partially charging it. Successful settlement is once per
+  user, Task and file; a new Task may incur another charge for the same file.
+  Never create a replacement Task to recover a failure.
+- Creation returns `operation_id`, including in structured error details when
+  submission is ambiguous. Replay only with that same `--operation-id`; do not
+  generate another ID or infer a new Task from a missing response. For recovery
+  across an interrupted CLI process, provide and retain the ID before submission.
+- Inspect `task status <TASK_ID> --details` for the exact `resource_id`,
+  `error_code`, `billing_status`, `pending_result_id` and `agent_activity`.
+- If `billing_status` is `pending_settlement`, the generated result is privately
+  saved but not yet delivered. After funding, use
+  `task retry <TASK_ID> --resource-id <RESOURCE_ID> --pending-result-id <PENDING_RESULT_ID>`.
+  Preserve both IDs on ambiguous responses and replay that same request. This
+  only settles and publishes the saved result: no model invocation or extra
+  model budget. A repeated successful settlement returns the same result.
+  A stale candidate returns a conflict; never silently replace it with a rerun.
+- Settlement leaves the Task suspended. The delivered file is available through
+  `task result` / `task export`; report that remaining work is still incomplete.
+- A failed file with no pending result can be explicitly re-extracted using
+  `task retry <TASK_ID> --resource-id <RESOURCE_ID>`. This operation has no
+  idempotent replay guarantee. If its response is ambiguous, inspect status;
+  do not automatically resend it. Retry multiple failed files serially, waiting
+  for the current round to terminate and inspecting status before the next one.
+- To continue a suspended Agent after explicit user direction, use
+  `task resume <TASK_ID>` without parse `--run-id` or `--after-funding` flags.
+  This continues other work and adds server-controlled execution budget.
+  Preserve the returned `command_id` and `checkpoint_version`, including on
+  failure, and replay with `--command-id <COMMAND_ID> --checkpoint-version <VERSION>`.
+  Exact replay uses the original pair even if status has since changed. Settle
+  pending results first. Never automatically loop resume or add budgets.
+
+To add newly parsed File Assets later, append their IDs to the same extraction
+Task. No extraction Run ID is accepted:
+
+```bash
+xparse-cli task add <EXTRACTION_TASK_ID> \
+  --file-id <NEW_FILE_ASSET_ID>
+```
+
+When MCP tools are available, the equivalent contracts are
+`create_extraction_task(file_ids, instruction, operation_id)` and
+`add_extraction_task_files(task_id, file_ids)`. Use `file_ids`; do not invent
+Parse Job, Parse Task Run, or source-pointer parameters.
 
 ### Full document or conversion
 
@@ -365,9 +433,9 @@ navigation or extraction.
 | Character details | `xparse-cli parse <FILE> --api auto --view json --output <DIR> --include-char-details` |
 | Show current quota | `xparse-cli quota --output json` |
 | Run a durable local-file Task | `xparse-cli task run --files '<GLOB>' --api auto` |
-| Create extraction from completed Parse Jobs | `xparse-cli extract create --instruction '<REQUEST>' --parse-job <JOB_ID>` |
-| Create extraction from a completed Parse Task Run | `xparse-cli extract create --instruction '<REQUEST>' --parse-task-run <TASK_ID>:<RUN_ID>` |
-| Append newly parsed documents to an extraction Run | `xparse-cli extract add <TASK_ID> --run-id <RUN_ID> --parse-job <JOB_ID>` |
+| Create extraction from parsed File Assets | `xparse-cli task run --task-type extract --instruction '<REQUEST>' --file-id <FILE_ASSET_ID>` |
+| Inspect stable Task resources | `xparse-cli task status <TASK_ID> --details` |
+| Append newly parsed File Assets to an extraction Task | `xparse-cli task add <TASK_ID> --file-id <FILE_ASSET_ID>` |
 | Rerun every Resource under a Task | `xparse-cli task rerun <TASK_ID> --mode all` |
 | Add files and create a new Run | `xparse-cli task rerun <TASK_ID> --mode new-files --files '<GLOB>'` |
 | Rerun selected Resources | `xparse-cli task rerun <TASK_ID> --mode selected-files --resource-id <RESOURCE_ID>` |

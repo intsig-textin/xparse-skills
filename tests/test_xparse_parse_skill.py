@@ -7,6 +7,13 @@ SKILL_ROOT = ROOT / "skills" / "xparse-parse"
 
 
 class XParseParseSkillContractTest(unittest.TestCase):
+    def test_extraction_recovery_preserves_billing_identity(self):
+        skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+        for token in ("pending_settlement", "--pending-result-id", "--command-id",
+                      "--checkpoint-version", "no model invocation", "100 free pages",
+                      "Never create a replacement Task", "no\n  idempotent replay guarantee"):
+            self.assertIn(token, skill)
+
     def test_runtime_skill_is_platform_neutral(self):
         contract = "\n".join(
             path.read_text(encoding="utf-8")
@@ -92,6 +99,44 @@ class XParseParseSkillContractTest(unittest.TestCase):
             "do not create a replacement Task or Run",
         ):
             self.assertIn(required, contract)
+
+    def test_semantic_extraction_uses_current_file_asset_contract(self):
+        skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+
+        for required in (
+            "task run --task-type extract",
+            "--file-id <FILE_ASSET_ID>",
+            "task status <TASK_ID> --details",
+            "resources[].file_id",
+            "run.run_id",
+            "run.completed_count",
+            "run.failed_count",
+            "result_page_url",
+            "create_extraction_task(file_ids, instruction, operation_id)",
+            "add_extraction_task_files(task_id, file_ids)",
+        ):
+            self.assertIn(required, skill)
+
+        for forbidden in (
+            "--parse-job",
+            "--parse-task-run",
+            "--run-id <EXTRACTION_RUN_ID>",
+            "add_extraction_task_sources",
+            "HTML `resource_link`",
+        ):
+            self.assertNotIn(forbidden, skill)
+
+    def test_semantic_extraction_does_not_read_parse_content_locally(self):
+        skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+
+        for required in (
+            "including a single file",
+            "first `run_id`",
+            "Do not call `task export`, `task read`",
+            "Do not read Parse results into the Host",
+            "exactly as returned",
+        ):
+            self.assertIn(required, skill)
 
 
 if __name__ == "__main__":
