@@ -7,6 +7,12 @@ SKILL_ROOT = ROOT / "skills" / "xparse-parse"
 
 
 class XParseParseSkillContractTest(unittest.TestCase):
+    def test_extraction_quota_is_separate_and_missing_is_unknown(self):
+        skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+        for token in ("extraction_quota.daily_pages_remaining", "extraction_quota.reset_at",
+                      "the extraction allowance is unknown", "do not infer 100 pages remaining"):
+            self.assertIn(token, skill)
+
     def test_extraction_recovery_preserves_billing_identity(self):
         skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
         for token in ("pending_settlement", "--pending-result-id", "--command-id",

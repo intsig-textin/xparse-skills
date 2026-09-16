@@ -74,7 +74,9 @@ only because OAuth or AppKey credentials exist.
 Run `xparse-cli quota --output json` when the user asks about quota, when a routing failure
 needs explanation, or before proposing a paid retry. Read all returned facts:
 
-- daily free pages remaining and reset time;
+- daily free parse pages remaining and reset time;
+- independent `extraction_quota` daily limit, used pages, remaining pages, and
+  reset time when present;
 - whether the request is authenticated;
 - authenticated free-package total, historical used count, and current
   `free_remain_count` when present (routing uses only `free_remain_count`);
@@ -287,6 +289,10 @@ action before polling resumes.
 #### Extraction billing and recovery
 
 - Extraction uses its own 100 free pages per user per day, then normal billing.
+  Read `extraction_quota.daily_pages_remaining` and `extraction_quota.reset_at`
+  from `xparse-cli quota --output json`. These are server facts, not a local
+  estimate. If `extraction_quota` is absent, the extraction allowance is unknown;
+  do not infer 100 pages remaining or substitute the parse allowance.
   Parse allowance is not the extraction allowance. The server checks the whole
   file against remaining free pages plus paid funds; insufficient funds reject
   the file, without partially charging it. Successful settlement is once per
