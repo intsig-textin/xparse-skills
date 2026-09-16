@@ -281,6 +281,34 @@ action before polling resumes.
 - Creating the extraction Task submits asynchronous work. Open or return the result
   page when useful, and use `task status <TASK_ID>` for progress. Apply the bounded
   polling backoff above; stop polling when user action is needed or the budget expires.
+- `task status <TASK_ID>` returns the server summary: `status`, `stage`,
+  `total_count`, `completed_count`, `failed_count`, `pending_count`, `terminal`,
+  `needs_user_action`, `complete`, and `issues`. Do not infer success from a
+  terminal state: only `complete=true` means the full result is ready. Report
+  missing or failed documents when the task stops with incomplete results.
+  When `needs_user_action=true`, stop polling and direct the user to the existing
+  result page; use `task status <TASK_ID> --details` only when the documented
+  recovery path requires it. Opening a page does not replace querying status.
+- Keep the default asynchronous submission and bounded status polling. When the
+  user explicitly requests foreground waiting, extraction creation and `task add`
+  accept `--wait`, with optional positive `--timeout` and `--poll-interval` durations.
+  These durations require `--wait`. Waiting reads the Task's current summary,
+  including concurrent additions or edits; it does not pin a Run or a submission
+  snapshot. It stops when `terminal=true` or `needs_user_action=true`.
+- A waited response preserves the original submission identifiers, counts,
+  `resource_version`, and `result_page_url`, and includes the latest `summary`
+  when one was obtained. The top-level `status` reflects that summary. Follow
+  `next_action`: `POLL_STATUS` queries the same Task, `READ_RESULTS` reads or
+  exports results, `INSPECT_TASK` reports issues and inspects the existing Task,
+  and `OPEN_RESULT_PAGE` requests user action on the existing page.
+- `wait_timed_out=true` ends only local waiting, including an in-flight status
+  request; continue with `task status <TASK_ID>`. Never resubmit creation or append
+  because of a wait timeout. A polling error or cancellation returns the accepted
+  submission with `wait_interrupted=true` and a structured error carrying the
+  same `task_id` and `details.submission_accepted=true`. Follow the structured
+  error gate before any further command; its `next_action` takes precedence.
+  The latest summary may be absent if the first query failed. Preserve the accepted
+  Task and never treat a wait error as a failed submission.
 - To read pure results use `task result <TASK_ID> --limit 50`. Follow `next_offset`
   with `--offset <NEXT_OFFSET> --snapshot <SNAPSHOT>`; on snapshot conflict restart
   from the first page rather than combining different task versions.
@@ -291,7 +319,7 @@ action before polling resumes.
 - JSON contains `file_name` and business `result` values without evidence or agent
   internals. Missing values are null, identifiers remain strings, and object/array
   values remain structured. CSV serializes object/array cells as JSON text.
-- Do not pass parse-only flags (`--api`, `--config`, `--password`, `--wait`, or
+- Do not pass parse-only flags (`--api`, `--config`, `--password`, or
   automatic `--output`) to extraction creation. `task run` defaults to parse for
   compatibility; extraction requires explicit `--task-type extract`.
 - `task add <TASK_ID>` uses the server's task type: pass local paths for parse,
