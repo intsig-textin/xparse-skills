@@ -329,10 +329,63 @@ action before polling resumes.
   automatic `--output`) to extraction creation. `task run` defaults to parse for
   compatibility; extraction requires explicit `--task-type extract`.
 - `task add <TASK_ID>` uses the server's task type: pass local paths for parse,
-  parsed `--file-id` values for extract. Parse add requests a new-files Run and
+  parsed `--file-id`, history `--history-id`, or local paths for extract. Local
+  extraction additions use the existing managed import flow, not a new extraction
+  Task. Preserve returned `uploaded_file_ids` and `operation_id`; after an
+  interrupted upload use the same operation identity, or import known assets with
+  `--uploaded-file-id`. `task add TASK --reconcile` refreshes pending imports.
+  Parse add requests a new-files Run and
   retains `--operation-id` recovery; a failure after binding does not mean files
   were not added. Preserve identifiers and follow the returned recovery instructions.
   Existing `task rerun --mode new-files` remains supported.
+
+#### Extraction workspace operations (requires a CLI build with these commands)
+
+Regional availability follows the page: list, spec set/clarify, whole-task or scoped
+rerun, preview, and version history are domestic-only. The server rejects these
+workspace operations in the global region; do not bypass this restriction.
+
+- Explicitly rerun the entire current extraction Task with `task retry <TASK_ID>`.
+  This is a new extraction round in the same Task, not recovery of one failed file
+  and not `task resume`. Never infer a full rerun from a status-query request.
+- Select files/fields using `task retry <TASK_ID> --scope selected
+  --resource-id <RESOURCE_ID> --field-id <FIELD_ID>`. Repeat selectors as needed;
+  file and field selectors intersect. `--only-outdated` preserves current/manual
+  values. With no selectors the active fields and all files are selected.
+- Legacy `task retry TASK --resource-id RESOURCE` retains single-file recovery.
+  Add `--scope selected` to explicitly re-extract that file. `--pending-result-id`
+  is for settlement only and cannot be combined with rerun selectors.
+- Read fields and their version with `task spec get TASK`. Use `task spec set TASK
+  --input <JSON_FILE>` for the full reviewed field definition: `expected_version`,
+  `task_rules`, `fields`, `apply_to_existing`, optional `restore_field_ids` and
+  `resource_ids`. Omitted existing active fields are deleted; never send a partial
+  list as the complete definition. `task spec clarify TASK --input <JSON_FILE>`
+  requests suggestions with `expected_version`, `name`, and `description`.
+- Correct or confirm results using `task field set|confirm TASK RESOURCE FIELD
+  --input <JSON_FILE>`. Preserve `base_result_version`, `expected_spec_version`,
+  `request_id`, the backend `value` envelope and optional `review`. Do not silently
+  enable `review.apply_to_future`. Read exact current values/versions/evidence
+  using `task status TASK --details`; read history with `task history TASK RESOURCE`
+  and source previews with `task preview TASK RESOURCE`.
+- `task copilot show TASK` reads the current draft/question; `task copilot steps
+  TASK --after N` reads the conversation/execution history. `task copilot send TASK
+  --text '<REQUEST>'` sends a new user instruction. For answers, confirmations,
+  edited confirmations or dismissal use `--input <JSON_FILE>`, preserving the
+  exact `kind`, `client_message_id`, `expected_version`, `reply_to`, `draft_id`,
+  `draft_revision`, and `edited_fields` as applicable. Present the draft to the
+  user before confirming; do not silently change confirm-only into confirm-and-rerun.
+- `task list` supports `--search`, `--status`, `--file-id`, `--offset`, `--limit`.
+  `task memory list TASK` reads task memories; `task memory revoke TASK MEMORY`
+  revokes only an explicitly selected correction memory.
+- `task page TASK` obtains a fresh server-issued `result_page_url` without adding
+  files or running extraction. Requires a backend supporting the page-link query.
+  Follow the host's link-opening contract; never reconstruct or expose a grant.
+- Preserve request/version identities on conflicts or ambiguous failures. Do not
+  refresh versions and automatically resend a mutation, loop task-wide retries,
+  or create replacement tasks. Respect the server's regional availability and
+  capability errors. Successful submission is not completed extraction.
+- These workspace commands require CLI 2.4.4-beta.7 or a later matching release.
+  Do not assume an older installed beta includes them. Check CLI help first.
 
 #### Extraction billing and recovery
 
@@ -341,6 +394,7 @@ action before polling resumes.
   from `xparse-cli quota --output json`. These are server facts, not a local
   estimate. If `extraction_quota` is absent, the extraction allowance is unknown;
   do not infer 100 pages remaining or substitute the parse allowance.
+  Missing `extraction_quota` means unknown (including unauthenticated callers, older servers, or a temporarily unavailable extraction ledger); never replace it with zero or 100. The existing `free_package` belongs to `pdf_to_markdown`, not extraction.
   Parse allowance is not the extraction allowance. The server checks the whole
   file against remaining free pages plus paid funds; insufficient funds reject
   the file, without partially charging it. Successful settlement is once per
@@ -374,8 +428,9 @@ action before polling resumes.
   Exact replay uses the original pair even if status has since changed. Settle
   pending results first. Never automatically loop resume or add budgets.
 
-For an append request, send only the newly supplied File Asset IDs to the same
-extraction Task after the parsing checks above. Do not execute
+For an append request, send only the newly supplied files to the same
+extraction Task. Use parsed File Asset IDs, history IDs, or the managed local-file
+import described above; do not mix managed imports and parsed/history sources. Do not execute
 `task run --task-type extract` or resend old files. Preserve the existing
 extraction instruction and fields; do not turn the append request into a new
 `--instruction`. No extraction Run ID is accepted:
