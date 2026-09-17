@@ -39,6 +39,9 @@ For every failed command, parse the final stderr object whose `schema_version`
 is `xparse_error.v1`. Treat that object as failure even if a shell wrapper
 reports exit code 0. Apply this gate before issuing another xParse command:
 
+- An unknown error is not evidence of a temporary service failure. Follow the
+  returned recovery fields; never infer retry permission from an unfamiliar code
+  or a generic conflict. Report the original message and request ID when escalation is needed.
 - `retryable=false` means do not retry or reinterpret the same logical action.
   Follow only the declared `next_action`. For `CONTACT_SUPPORT`, report the
   error and preserved identifiers, then issue no more xParse commands for the
@@ -289,6 +292,10 @@ action before polling resumes.
   When `needs_user_action=true`, stop polling and direct the user to the existing
   result page; use `task status <TASK_ID> --details` only when the documented
   recovery path requires it. Opening a page does not replace querying status.
+- If extraction returns `FILE_NOT_FOUND` with `CHECK_FILE_ACCESS`, verify the
+  supplied File Asset ID and signed-in account; do not retry the same request
+  automatically. If it returns `EXTRACTION_SOURCE_NOT_PARSED` with `PARSE_FILE`,
+  complete parsing for that file in the current account before extraction.
 - Summary counts are document counts. A failed document has one document-level
   issue with `error_code` and `error_message` when available; report that cause,
   not a second missing-field error. For `insufficient_balance`, explain that
@@ -611,3 +618,17 @@ failure after its single allowed Agent-layer retry.
 - [api-reference.md](references/api-reference.md): response fields and service error codes.
 - [error-handling.md](references/error-handling.md): retry, stop, and paid-approval decisions.
 - [textin-key-setup.md](references/textin-key-setup.md): standalone legacy AppKey setup.
+
+### Specific extraction failures
+
+Use the server's symbolic error and recovery fields instead of interpreting every
+conflict as a version mismatch. Missing or inaccessible files require checking the
+account and file ID; unparsed or expired sources require parsing; incomplete uploads
+require checking upload status. Invalid results require re-parsing, oversized results
+require splitting, and conflicting snapshots require choosing one source. For
+`IDEMPOTENCY_CONFLICT`, restore the original request or use a new operation ID only
+for a genuinely new request. For `NO_RUNNABLE_FILES`, inspect existing results or add
+new input. Refresh before correcting a real task/result version conflict. Stored-data
+errors require support with the request ID. Retry a source download only when the
+server explicitly marks that failure retryable; never infer retry permission from
+an unknown code.
