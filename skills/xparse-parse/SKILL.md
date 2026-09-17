@@ -92,6 +92,13 @@ Device OAuth and AppKey are different identities. If quota returns
 an OAuth login indicator. Treat only fields in the current quota response as
 available.
 
+An authenticated default quota response may still omit `extraction_quota`.
+Report that the server did not return the extraction allowance; do not claim
+that enterprise OAuth intrinsically cannot query it or substitute the parse
+allowance. Missing quota data alone does not prove that extraction is
+unavailable; use the actual extraction Task response for that conclusion. If
+`authenticated=false`, restore the intended login first.
+
 The free endpoint supports PDF and images. Office, HTML, OFD, and other formats
 may require `--api paid`; explain this and obtain the user's approval before
 switching modes. If all reported free sources are insufficient, stop and explain
@@ -101,8 +108,14 @@ the current quota rather than silently retrying as paid.
 
 When the user asks whether a supported image or PDF has been manipulated or AI
 generated, use `xparse-cli detect-manipulation <FILE|URL>`. This is a separate
-service from parsing; never infer its free package from `xparse-cli quota`'s
-`pdf_to_markdown` allowance. The CLI prechecks the current
+service from parsing. To inspect its current package, run
+`xparse-cli quota --service manipulation_detection --output json` and read
+`free_package.free_remain_count` only when `authenticated=true` and the
+returned service is `manipulation_detection`. A missing `free_package` is
+unknown, not zero; never infer this package from the unqualified
+`xparse-cli quota` command's `pdf_to_markdown` allowance. If the installed CLI
+does not recognize `--service`, update it instead of using the default quota
+as a substitute. The CLI prechecks the current
 `manipulation_detection` free package through the quota endpoint. If free quota
 is available, it makes one detection call without a paid flag. If free quota is
 exhausted or cannot be confirmed, it stops before detection; ask the user to
@@ -605,6 +618,7 @@ navigation or extraction.
 | Encrypted document | `xparse-cli parse <FILE> --api auto --password <PWD>` |
 | Character details | `xparse-cli parse <FILE> --api auto --view json --output <DIR> --include-char-details` |
 | Show current quota | `xparse-cli quota --output json` |
+| Show manipulation-detection quota | `xparse-cli quota --service manipulation_detection --output json` |
 | Detect manipulation or AIGC risk | `xparse-cli detect-manipulation <FILE_OR_URL> --view json` |
 | Run a durable local-file Task | `xparse-cli task run --files '<GLOB>' --api auto` |
 | Create extraction from parsed File Assets | `xparse-cli task run --task-type extract --instruction '<REQUEST>' --file-id <FILE_ASSET_ID>` |
