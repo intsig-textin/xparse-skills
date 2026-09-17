@@ -115,12 +115,12 @@ treated as a new `parse` operation.
 
 - Use `parse` for one document or URL when the user needs an immediate result,
   conversion, or local outline/search navigation.
-- Structured extraction is the exception: first distinguish a new extraction
-  request from appending files to an existing extraction Task. Parse new local
-  files through the first full Run of a new durable Parse Task, then either
-  create an extraction Task or append to the existing extraction Task as
-  requested. Follow the semantic extraction section below instead of reading
-  parsed content into the Host.
+- Structured extraction is the exception: first decide whether new files belong
+  to the current conversation's extraction Task or a genuinely new extraction
+  request. A follow-up for the same goal can be an append without the word
+  "append". Choose the supported source path below; a new Parse Task is not a
+  prerequisite for every append. Follow the semantic extraction section below
+  instead of reading parsed content into the Host.
 - Use the durable Task Runtime for two or more local documents, or when the user
   explicitly needs a persistent Task ID, later status checks, selective result
   reads, exports, debugging, or continuation. A one-file request can therefore
@@ -213,24 +213,28 @@ or recovering a durable Task.
 
 ### Semantic extraction Task from parsed File Assets
 
-First resolve whether the user wants a new extraction or to append files
-(for example, "追加文件", "继续添加", or "add these to the previous task").
-Appending must preserve the existing extraction Task; it must never create a
-replacement extraction Task, including after an error or resource-version conflict.
-Use the extraction Task ID explicitly supplied by the user or unambiguously
-identified by the current conversation's successful extraction response. If the
-target is missing or ambiguous, ask which extraction Task to append to before
-submitting work. Do not guess a target from recency or confuse a Parse Task ID
-with an extraction Task ID. Verify the target using `task status <EXTRACTION_TASK_ID>`.
+First decide whether new files continue an existing extraction goal or start a
+new one. For an append, use an extraction Task ID explicitly supplied by the
+user or, when none is supplied, the one accepted extraction Task in the current
+conversation that is unambiguously tied to that goal. Treat a follow-up
+supplying more files as an append even when the user says only "再处理这份" or
+"还有这些文件" and never says "追加". Preserve the extraction `task_id` returned
+by its creation or previous append. The same conversation alone is not enough:
+an explicit new or independent extraction request starts a new Task. If the goal
+or target is unclear, or multiple extraction Tasks could match, ask before
+submitting work. Do not pick the most recent Task or confuse a Parse Task ID
+with an extraction Task ID. Never turn an append failure or resource-version
+conflict into a replacement Task.
+Verify the target and its type with `task status <EXTRACTION_TASK_ID>`.
 
 Only for a new extraction request, create one persistent extraction
 Task on the service. Do not read Parse results into the Host and do not generate
 the final field values locally. Preserve the user's extraction request verbatim
 as `instruction`; do not replace it with a fixed schema or add field definitions.
 
-If the request already supplies trustworthy File Asset IDs from xParse, skip
-parsing. For an append request, go directly to the append command below. For a
-new extraction request, create the Task directly. Repeat `--file-id` in source order:
+If trustworthy parsed File Asset IDs from xParse are already available, skip
+parsing. Append them to the existing Task with `task add --file-id`; for a new
+extraction request, create the Task directly. Repeat `--file-id` in source order:
 
 ```bash
 xparse-cli task run --task-type extract \
@@ -238,9 +242,23 @@ xparse-cli task run --task-type extract \
   --file-id <FILE_ASSET_ID>
 ```
 
-For local files, including a single file, first create a new durable Parse Task
-and preserve its accepted `task_id` and first `run_id` separately from the
-existing `<EXTRACTION_TASK_ID>` when appending:
+For an append, an installed CLI that supports extraction `task add --history-id`
+can use existing history IDs directly; an installed CLI that supports managed
+local-file imports can use `task add <EXTRACTION_TASK_ID> <FILE>` directly. Check
+the installed `task add --help` for `--history-id` or managed-import flags such
+as `--uploaded-file-id` and `--reconcile` instead of assuming a particular
+Connector version supports them. Neither path needs a new Parse Task. If local
+import is unavailable, obtain parsed File Asset IDs through the Parse Task path
+below and still append to the original extraction Task. If only a history ID is
+available but the installed CLI cannot use it, ask for a supported source or a
+Connector update; do not pretend a Parse Task can consume that ID. Never create
+a replacement extraction Task.
+
+For local files without parsed File Asset IDs, including a single file, create
+a durable Parse Task only when creating a new extraction Task or when the
+installed CLI cannot import those files directly for an append. Preserve the
+Parse Task's accepted `task_id` and first `run_id` separately from
+`<EXTRACTION_TASK_ID>` when appending:
 
 ```bash
 xparse-cli task run <FILE> --api auto
@@ -259,8 +277,8 @@ When the exact first Run reports `completed`, fetch the stable Task resources:
 xparse-cli task status <TASK_ID> --details
 ```
 
-Create or append to the extraction Task only when all of these invariants hold in the details
-response:
+Create or append using File Asset IDs from this Parse Task only when all of
+these invariants hold in the details response:
 
 - `run.run_id` equals `<FIRST_RUN_ID>` and `run.status` is `completed`;
 - `run.failed_count` is `0`;
@@ -391,8 +409,8 @@ workspace operations in the global region; do not bypass this restriction.
   refresh versions and automatically resend a mutation, loop task-wide retries,
   or create replacement tasks. Respect the server's regional availability and
   capability errors. Successful submission is not completed extraction.
-- These workspace commands require CLI 2.4.4-beta.7 or a later matching release.
-  Do not assume an older installed beta includes them. Check CLI help first.
+- These new workspace commands are source changes pending a matching release;
+  do not assume a previously installed beta includes them. Check CLI help first.
 
 #### Extraction billing and recovery
 
@@ -436,8 +454,9 @@ workspace operations in the global region; do not bypass this restriction.
   pending results first. Never automatically loop resume or add budgets.
 
 For an append request, send only the newly supplied files to the same
-extraction Task. Use parsed File Asset IDs, history IDs, or the managed local-file
-import described above; do not mix managed imports and parsed/history sources. Do not execute
+extraction Task. Use a source path supported by the installed CLI: parsed File
+Asset IDs, history IDs, or managed local-file import. Do not mix managed imports
+and parsed/history sources in one command. Do not execute
 `task run --task-type extract` or resend old files. Preserve the existing
 extraction instruction and fields; do not turn the append request into a new
 `--instruction`. No extraction Run ID is accepted:
@@ -445,10 +464,19 @@ extraction instruction and fields; do not turn the append request into a new
 ```bash
 xparse-cli task add <EXTRACTION_TASK_ID> \
   --file-id <NEW_FILE_ASSET_ID>
+# If supported, for a history file instead:
+xparse-cli task add <EXTRACTION_TASK_ID> --history-id <HISTORY_ID>
+# If supported, for a local file instead:
+xparse-cli task add <EXTRACTION_TASK_ID> <NEW_LOCAL_FILE>
 ```
 
 Check that the returned `task_id` is the original `<EXTRACTION_TASK_ID>`, then
-poll that same Task and use its returned `result_page_url`. If append fails,
+poll that same Task. Direct File Asset/history additions may return a
+`result_page_url`; use it only when actually returned. Managed local-file import
+returns `operation_id`, `uploaded_file_ids`, and import state instead of a page
+URL: preserve those identities, follow its import recovery/status instructions,
+and request a fresh server-issued link with `task page <EXTRACTION_TASK_ID>`
+only when supported and a page is needed. Never invent a URL. If append fails,
 follow the error's recovery instructions on the same Task; never fall back to
 creating another extraction Task.
 
@@ -560,6 +588,8 @@ navigation or extraction.
 | Create extraction from parsed File Assets | `xparse-cli task run --task-type extract --instruction '<REQUEST>' --file-id <FILE_ASSET_ID>` |
 | Inspect stable Task resources | `xparse-cli task status <TASK_ID> --details` |
 | Append newly parsed File Assets to an extraction Task | `xparse-cli task add <TASK_ID> --file-id <FILE_ASSET_ID>` |
+| Append an existing history file when supported | `xparse-cli task add <TASK_ID> --history-id <HISTORY_ID>` |
+| Append a local file by managed import when supported | `xparse-cli task add <TASK_ID> <LOCAL_FILE>` |
 | Rerun every Resource under a Task | `xparse-cli task rerun <TASK_ID> --mode all` |
 | Add files and create a new Run | `xparse-cli task rerun <TASK_ID> --mode new-files --files '<GLOB>'` |
 | Rerun selected Resources | `xparse-cli task rerun <TASK_ID> --mode selected-files --resource-id <RESOURCE_ID>` |
