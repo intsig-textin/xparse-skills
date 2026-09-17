@@ -12,7 +12,8 @@ class XParseParseSkillContractTest(unittest.TestCase):
         for token in ("extraction_quota.daily_pages_remaining", "extraction_quota.reset_at",
                       "the extraction allowance is unknown", "do not infer 100 pages remaining",
                       "do not claim\nthat enterprise OAuth intrinsically cannot query it",
-                      "Missing quota data alone does not prove that extraction is"):
+                      "Missing quota data alone does not prove that extraction is",
+                      "Do not substitute `detect-manipulation` when"):
             self.assertIn(token, skill)
 
     def test_manipulation_quota_is_named_and_separate(self):

@@ -99,6 +99,18 @@ allowance. Missing quota data alone does not prove that extraction is
 unavailable; use the actual extraction Task response for that conclusion. If
 `authenticated=false`, restore the intended login first.
 
+Keep the three paths separate:
+
+- Unqualified `quota` reports parse allowance and, only when returned,
+  `extraction_quota` for structured extraction (`open_kie_vlm_engine`).
+- `quota --service manipulation_detection` reports only the manipulation
+  detector's free package. It is not an extraction allowance or an extraction
+  capability check.
+- `task run --task-type extract` creates a structured-extraction Task. Judge
+  its availability and outcome from that Task's actual response, never from a
+  manipulation quota response. Do not substitute `detect-manipulation` when
+  extraction quota is missing or extraction fails.
+
 The free endpoint supports PDF and images. Office, HTML, OFD, and other formats
 may require `--api paid`; explain this and obtain the user's approval before
 switching modes. If all reported free sources are insufficient, stop and explain
