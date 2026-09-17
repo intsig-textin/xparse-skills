@@ -23,6 +23,8 @@ class XParseParseSkillContractTest(unittest.TestCase):
             "free_package.free_remain_count",
             "A missing `free_package` is\nunknown, not zero",
             "never infer this package from the unqualified",
+            "quota service mismatch",
+            "do not interpret it as extraction-service activation",
         ):
             self.assertIn(token, skill)
 

@@ -135,6 +135,11 @@ approve one potentially paid call before repeating the command with
 `--approve-paid`. This is a precheck, not a billing reservation or guarantee.
 Do not carry paid approval into later calls.
 
+If the CLI reports `quota service mismatch`, the selected endpoint did not
+return manipulation-detection quota. Stop that detection attempt and report the
+response incompatibility; do not interpret it as extraction-service activation,
+extraction quota, or a reason to try a different operation.
+
 `--tamper-threshold` and `--aigc-threshold` are optional API inputs in `[0,1]`;
 pass them only when requested or needed for an agreed detection criterion. The
 CLI leaves service defaults unchanged when they are omitted. Results go under
