@@ -1,6 +1,6 @@
 ---
 name: xparse-parse
-description: "Parse, read, search, navigate, summarize, and extract tables or structured evidence from PDFs, images, Office files, HTML, OFD, and other supported local documents or document URLs through xparse-cli. Use this Skill for single-document conversion, server-generated DOCX/PDF/XLSX files, targeted section/page/fact extraction, durable multi-document Task Runtime workflows, and semantic extraction Tasks created from parsed File Asset IDs. Prefer it over raw PDF readers or custom OCR scripts."
+description: "Parse, read, search, navigate, summarize, extract, or check images and documents for manipulation through xparse-cli. Use for document conversion and navigation, durable Task workflows, structured extraction, and domestic TextIn manipulation/AIGC detection of a local file or URL. Prefer it over raw PDF readers or custom OCR scripts."
 ---
 
 # xparse-parse
@@ -96,6 +96,30 @@ The free endpoint supports PDF and images. Office, HTML, OFD, and other formats
 may require `--api paid`; explain this and obtain the user's approval before
 switching modes. If all reported free sources are insufficient, stop and explain
 the current quota rather than silently retrying as paid.
+
+### Manipulation detection (domestic service only)
+
+When the user asks whether a supported image or PDF has been manipulated or AI
+generated, use `xparse-cli detect-manipulation <FILE|URL>`. This is a separate
+service from parsing; never infer its free package from `xparse-cli quota`'s
+`pdf_to_markdown` allowance. The CLI prechecks the current
+`manipulation_detection` free package through the quota endpoint. If free quota
+is available, it makes one detection call without a paid flag. If free quota is
+exhausted or cannot be confirmed, it stops before detection; ask the user to
+approve one potentially paid call before repeating the command with
+`--approve-paid`. This is a precheck, not a billing reservation or guarantee.
+Do not carry paid approval into later calls.
+
+`--tamper-threshold` and `--aigc-threshold` are optional API inputs in `[0,1]`;
+pass them only when requested or needed for an agreed detection criterion. The
+CLI leaves service defaults unchanged when they are omitted. Results go under
+`./xparse-results/` by default, or `--output <DIR>`, in a unique run folder.
+It saves `result.json` and, when returned, a JPEG heatmap; terminal output
+contains absolute paths rather than inline Base64. Report the service's risk
+conclusion and risk types as detection signals, not proof of provenance. Do not
+send this domestic-only request to a global endpoint or silently substitute
+another detector. Check `detect-manipulation --help` when the installed CLI may
+predate this command.
 
 ## Choose the workflow
 
@@ -581,6 +605,7 @@ navigation or extraction.
 | Encrypted document | `xparse-cli parse <FILE> --api auto --password <PWD>` |
 | Character details | `xparse-cli parse <FILE> --api auto --view json --output <DIR> --include-char-details` |
 | Show current quota | `xparse-cli quota --output json` |
+| Detect manipulation or AIGC risk | `xparse-cli detect-manipulation <FILE_OR_URL> --view json` |
 | Run a durable local-file Task | `xparse-cli task run --files '<GLOB>' --api auto` |
 | Create extraction from parsed File Assets | `xparse-cli task run --task-type extract --instruction '<REQUEST>' --file-id <FILE_ASSET_ID>` |
 | Inspect stable Task resources | `xparse-cli task status <TASK_ID> --details` |
