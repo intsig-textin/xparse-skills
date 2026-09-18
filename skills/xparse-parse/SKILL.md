@@ -232,7 +232,7 @@ access returned a non-retryable error.
 Read [task-runtime.md](references/task-runtime.md) before starting, inspecting,
 or recovering a durable Task.
 
-### Semantic extraction Task from parsed File Assets
+### Semantic extraction Task from File Assets
 
 First decide whether new files continue an existing extraction goal or start a
 new one. For an append, use an extraction Task ID explicitly supplied by the
@@ -255,13 +255,30 @@ as `instruction`; do not replace it with a fixed schema or add field definitions
 
 If trustworthy parsed File Asset IDs from xParse are already available, skip
 parsing. Append them to the existing Task with `task add --file-id`; for a new
-extraction request, create the Task directly. Repeat `--file-id` in source order:
+extraction request, create the Task directly. A newly uploaded, ready File Asset
+ID may also be used when creating a new extraction Task: the backend starts
+paid managed parsing only for files without a reusable parse result. Do not
+silently incur that parse cost; obtain approval when the user has not already
+authorized paid parsing. `task add --file-id` still requires parsed assets.
+Repeat `--file-id` in source order:
 
 ```bash
 xparse-cli task run --task-type extract \
   --instruction '<USER_REQUEST>' \
   --file-id <FILE_ASSET_ID>
 ```
+
+When the user needs an independent upload or wants to keep its ID for later,
+use `xparse-cli upload <FILE> --operation-id <OPERATION_ID>`. Its JSON returns
+the original `file_id` and does not parse the file. Preserve `operation_id` on
+an interrupted upload; the CLI checks the local SHA-256 before reusing a ready
+asset. Use the returned ID as `--file-id` for a **new** extraction Task. If
+an existing parse result is reusable, the backend does not charge for a new
+parse. If not, the Task first enters paid managed parsing. The initial
+`document_count` counts only attached extraction Resources and may be zero;
+`submitted_file_count` reports how many IDs the CLI submitted. Check
+`task status` for import failures and never infer `complete=true` from the
+creation response or from one completed file.
 
 For an append, an installed CLI that supports extraction `task add --history-id`
 can use existing history IDs directly; an installed CLI that supports managed
@@ -275,9 +292,12 @@ available but the installed CLI cannot use it, ask for a supported source or a
 Connector update; do not pretend a Parse Task can consume that ID. Never create
 a replacement extraction Task.
 
-For local files without parsed File Asset IDs, including a single file, create
-a durable Parse Task only when creating a new extraction Task or when the
-installed CLI cannot import those files directly for an append. Preserve the
+For local files without parsed File Asset IDs, including a single file, the
+free-first path remains a durable Parse Task when creating a new extraction
+Task or when the installed CLI cannot import those files directly for an append.
+The separate `upload` path above is for an explicitly desired original asset
+ID and requires paid-parse approval before creating extraction from a raw ID.
+Preserve the
 Parse Task's accepted `task_id` and first `run_id` separately from
 `<EXTRACTION_TASK_ID>` when appending:
 
@@ -607,7 +627,8 @@ navigation or extraction.
 | Show current quota | `xparse-cli quota --output json` |
 | Detect manipulation or AIGC risk | `xparse-cli detect-manipulation <FILE_OR_URL> --view json` |
 | Run a durable local-file Task | `xparse-cli task run --files '<GLOB>' --api auto` |
-| Create extraction from parsed File Assets | `xparse-cli task run --task-type extract --instruction '<REQUEST>' --file-id <FILE_ASSET_ID>` |
+| Upload one file without parsing | `xparse-cli upload <FILE> --operation-id <OPERATION_ID>` |
+| Create extraction from a ready File Asset | `xparse-cli task run --task-type extract --instruction '<REQUEST>' --file-id <FILE_ASSET_ID>` |
 | Inspect stable Task resources | `xparse-cli task status <TASK_ID> --details` |
 | Append newly parsed File Assets to an extraction Task | `xparse-cli task add <TASK_ID> --file-id <FILE_ASSET_ID>` |
 | Append an existing history file when supported | `xparse-cli task add <TASK_ID> --history-id <HISTORY_ID>` |
