@@ -10,7 +10,22 @@ class XParseParseSkillContractTest(unittest.TestCase):
     def test_extraction_quota_is_separate_and_missing_is_unknown(self):
         skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
         for token in ("extraction_quota.daily_pages_remaining", "extraction_quota.reset_at",
-                      "the extraction allowance is unknown", "do not infer 100 pages remaining"):
+                      "the extraction allowance is unknown", "do not infer 100 pages remaining",
+                      "do not claim\nthat enterprise OAuth intrinsically cannot query it",
+                      "Missing quota data alone does not prove that extraction is",
+                      "Do not substitute `detect-manipulation` when"):
+            self.assertIn(token, skill)
+
+    def test_manipulation_quota_is_named_and_separate(self):
+        skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+        for token in (
+            "quota --service manipulation_detection --output json",
+            "free_package.free_remain_count",
+            "A missing `free_package` is\nunknown, not zero",
+            "never infer this package from the unqualified",
+            "quota service mismatch",
+            "do not interpret it as extraction-service activation",
+        ):
             self.assertIn(token, skill)
 
     def test_extraction_recovery_preserves_billing_identity(self):
