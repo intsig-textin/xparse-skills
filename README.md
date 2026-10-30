@@ -22,13 +22,16 @@ Parse complete documents or navigate targeted sections, pages, facts, and tables
 - User provides a local file or document URL to read, convert, search, or extract content from
 - Task requires turning a document into agent-friendly text before further processing
 - Preparing content for summarization, analysis, or downstream workflows
+- Cropping, enhancing, dewarping, or checking manipulation/AIGC risks through domestic image services
 
 **Quick start:**
 
 ```bash
-xparse-cli parse report.pdf --api auto                       # Markdown → stdout
-xparse-cli parse report.pdf --api auto --view json           # Structured JSON output
-xparse-cli parse report.pdf --api auto --output ./result/    # Save to directory
+xparse-cli parse report.pdf --api auto                         # Markdown → stdout
+xparse-cli parse report.pdf --api auto --view json             # Structured JSON output
+xparse-cli parse report.pdf --api auto --output ./result/      # Save to directory
+xparse-cli crop-enhance scan.jpg --enhance-mode 5 --view json  # Crop, dewarp, remove shadows → local files
+xparse-cli detect-manipulation scan.jpg --view json            # Detect risks → local JSON and optional heatmap
 ```
 
 > See [SKILL.md](skills/xparse-parse/SKILL.md) for full routing rules, error handling, and references.

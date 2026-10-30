@@ -7,6 +7,25 @@ SKILL_ROOT = ROOT / "skills" / "xparse-parse"
 
 
 class XParseParseSkillContractTest(unittest.TestCase):
+    def test_crop_routing_keeps_defaults_quota_and_image_contract(self):
+        skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+        for token in ("crop-enhance", "quota --service crop_enhance_image --output json",
+                      "--crop-image 0 --dewarp-image 0", "--only-position 1",
+                      "--correct-direction 1", "all original JPEG outputs",
+                      "single potentially charged call", "missing data is unknown"):
+            self.assertIn(token, skill)
+
+    def test_context_lifecycle_is_consistent_with_task_runtime(self):
+        skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+        runtime = (SKILL_ROOT / "references/task-runtime.md").read_text(encoding="utf-8")
+        self.assertIn("on every business invocation", skill)
+        self.assertIn("on every Task\nRuntime invocation", runtime)
+        self.assertIn("`quota` precheck", skill)
+        self.assertIn("quota precheck", runtime)
+        for text in (skill, runtime):
+            self.assertNotIn("only to the first", text)
+            self.assertNotIn("delete the file immediately", text)
+
     def test_extraction_quota_is_separate_and_missing_is_unknown(self):
         skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
         for token in ("extraction_quota.daily_pages_remaining", "extraction_quota.reset_at",
